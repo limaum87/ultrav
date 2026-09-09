@@ -1,6 +1,6 @@
 import { api, unwrap, type Host, type VirtualMachine } from '../api/client';
 import { formatBytes, formatUptime, usePolling } from '../lib/hooks';
-import { Gauge, StateBadge } from '../components/ui';
+import { EmptyState, MetricCard, StateBadge, TableSkeleton } from '../components/ui';
 
 export default function Dashboard() {
   const { data, error, loading } = usePolling(async () => {
@@ -9,82 +9,104 @@ export default function Dashboard() {
     return { host, vms } satisfies { host: Host; vms: { items: VirtualMachine[]; total: number } };
   });
 
-  if (loading) return <div className="page loading">Loading…</div>;
-  if (error || !data) return <div className="page error">Failed to reach API: {error}</div>;
+  if (error) return <div className="page page-wide error alert">Failed to reach API: {error}</div>;
 
-  const { host, vms } = data;
-  const running = vms.items.filter((v) => v.state === 'running').length;
-  const stopped = vms.total - running;
-  const cpuPct = host.cpu.usagePercent ?? 0;
-  const memPct = (host.memoryUsedBytes / host.memoryTotalBytes) * 100;
-  const storPct = host.storageTotalBytes
-    ? ((host.storageUsedBytes ?? 0) / host.storageTotalBytes) * 100
-    : 0;
+  const host = data?.host;
+  const vms = data?.vms;
+  const running = vms ? vms.items.filter((v) => v.state === 'running').length : 0;
+  const cpuPct = host?.cpu.usagePercent ?? 0;
+  const memPct = host ? (host.memoryUsedBytes / host.memoryTotalBytes) * 100 : 0;
+  const storPct =
+    host?.storageTotalBytes && host.storageUsedBytes != null
+      ? (host.storageUsedBytes / host.storageTotalBytes) * 100
+      : null;
 
   return (
-    <div className="page">
+    <div className="page page-wide">
       <header className="page-head">
         <div>
           <h1>Dashboard</h1>
           <p className="subtitle">
-            {host.hostname} · {host.operatingSystem} · kernel {host.kernel}
+            {host ? (
+              <>{host.hostname} · {host.operatingSystem} · kernel {host.kernel}</>
+            ) : (
+              'connecting…'
+            )}
           </p>
         </div>
-        <div className="uptime-chip">up {formatUptime(host.uptimeSeconds)}</div>
+        {host && <div className="uptime-chip">up {formatUptime(host.uptimeSeconds)}</div>}
       </header>
 
-      <section className="grid-3">
-        <div className="card">
-          <Gauge
-            label="CPU"
-            value={`${cpuPct.toFixed(1)}%`}
-            max={`${host.cpu.threads} threads`}
-            used={cpuPct}
-          />
-          <div className="card-sub">{host.cpu.model}</div>
-        </div>
-        <div className="card">
-          <Gauge
-            label="Memory"
-            value={formatBytes(host.memoryUsedBytes)}
-            max={formatBytes(host.memoryTotalBytes)}
-            used={memPct}
-          />
-        </div>
-        <div className="card">
-          <Gauge
-            label="Storage"
-            value={formatBytes(host.storageUsedBytes ?? 0)}
-            max={formatBytes(host.storageTotalBytes ?? 0)}
-            used={storPct}
-          />
-        </div>
+      <section className="metric-grid">
+        <MetricCard
+          label="CPU Usage"
+          value={`${cpuPct.toFixed(1)}%`}
+          used={cpuPct}
+          hint={host ? `${host.cpu.model} · ${host.cpu.threads} threads` : undefined}
+          loading={loading}
+        />
+        <MetricCard
+          label="Memory Usage"
+          value={host ? `${formatBytes(host.memoryUsedBytes, 1)} / ${formatBytes(host.memoryTotalBytes, 0)}` : '—'}
+          used={host ? memPct : null}
+          loading={loading}
+        />
+        <MetricCard
+          label="Storage Usage"
+          value={
+            host
+              ? `${formatBytes(host.storageUsedBytes ?? 0, 1)} / ${formatBytes(host.storageTotalBytes ?? 0, 1)}`
+              : '—'
+          }
+          used={storPct}
+          loading={loading}
+        />
+        <MetricCard
+          label="Virtual Machines"
+          value={vms?.total ?? 0}
+          hint={vms ? `${running} running · ${vms.total - running} stopped` : undefined}
+          tone="ok"
+          loading={loading}
+        />
       </section>
 
-      <section className="card vms-summary">
-        <div className="summary-row">
-          <div className="summary-block">
-            <span className="summary-num">{vms.total}</span>
-            <span className="summary-label">Virtual Machines</span>
-          </div>
-          <div className="summary-block">
-            <span className="summary-num ok">{running}</span>
-            <span className="summary-label">Running</span>
-          </div>
-          <div className="summary-block">
-            <span className="summary-num">{stopped}</span>
-            <span className="summary-label">Stopped</span>
-          </div>
-          <div className="summary-vms">
-            {vms.items.map((vm) => (
-              <div key={vm.id} className="summary-vm">
-                <StateBadge state={vm.state} />
-                <span className="summary-vm-name">{vm.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <div className="card table-card">
+        <div className="card-title card-title-pad">Virtual Machines</div>
+        {loading ? (
+          <TableSkeleton rows={4} cols={5} />
+        ) : !vms || vms.items.length === 0 ? (
+          <EmptyState title="No virtual machines" message="Create your first VM from the Virtual Machines page." />
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>vCPU</th>
+                <th>Memory</th>
+                <th>IP Address</th>
+                <th>Uptime</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vms.items.map((vm) => (
+                <tr key={vm.id}>
+                  <td>
+                    <a className="vm-link" href={`/vms/${vm.id}`}>
+                      {vm.name}
+                    </a>
+                  </td>
+                  <td><StateBadge state={vm.state} /></td>
+                  <td>{vm.vcpus}</td>
+                  <td>{formatBytes(vm.memoryBytes, 0)}</td>
+                  <td className="mono">{vm.ipAddress ?? '—'}</td>
+                  <td>{vm.state === 'running' ? formatUptime(vm.uptimeSeconds) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

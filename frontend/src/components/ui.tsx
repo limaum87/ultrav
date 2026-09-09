@@ -243,7 +243,7 @@ export function EmptyState({
 }: {
   icon?: ReactNode;
   title: string;
-  message?: string;
+  message?: ReactNode;
   action?: ReactNode;
 }) {
   return (
