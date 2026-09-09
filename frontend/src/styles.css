@@ -351,3 +351,20 @@ h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
   border-top: 1px solid var(--border);
 }
 .wiz-foot-right { display: flex; gap: 10px; }
+
+/* --- ISO library --- */
+.iso-card { margin-top: 16px; padding: 16px 20px; }
+.iso-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.iso-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-elev2);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.iso-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.iso-empty { color: var(--text-faint); text-align: center; padding: 24px 8px; }

@@ -194,6 +194,7 @@ Marque somente se **todos** passarem:
 | `HYPERVISOR_LIBVIRT_URI` | `qemu:///system` | URI de conexão do libvirt (`qemu+ssh://host/system` também funciona) |
 | `ULTRAV_PORT` | `8080` | Porta interna do backend (externa no compose: 8275 via nginx) |
 | `ULTRAV_CORS_ORIGIN` | *(vazio)* | Origin do frontend quando acessado fora do proxy (compose não precisa) |
+| `ULTRAV_ISO_DIR` | `/var/lib/libvirt/images/isos` | Diretório da biblioteca de ISOs (upload via UI; anexada como mídia de instalação no wizard). No compose aponta para o volume `ultrav-isos` (`/var/lib/ultrav/isos`) |
 
 ## O que o agente NÃO deve fazer
 

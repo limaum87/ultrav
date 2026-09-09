@@ -7,12 +7,16 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
+	"github.com/ultrav/ultrav/backend/internal/iso"
 )
 
 //go:embed openapi.json
@@ -21,14 +25,15 @@ var openapiJSON embed.FS
 // Server wires the HTTP API to a hypervisor.Provider.
 type Server struct {
 	provider hypervisor.Provider
+	isos     *iso.Store
 	log      *slog.Logger
 	router   *http.ServeMux
 }
 
 // NewServer builds the API server. The generated openapi.json is embedded and
 // served at /openapi.json with Swagger UI at /docs.
-func NewServer(provider hypervisor.Provider, log *slog.Logger) *Server {
-	s := &Server{provider: provider, log: log, router: http.NewServeMux()}
+func NewServer(provider hypervisor.Provider, isos *iso.Store, log *slog.Logger) *Server {
+	s := &Server{provider: provider, isos: isos, log: log, router: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -60,6 +65,11 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/storage/pools", s.handleListStoragePools)
 	mux.HandleFunc("GET /api/v1/storage/pools/{id}", s.requireValidVMID(s.handleGetStoragePool))
 	mux.HandleFunc("POST /api/v1/storage/pools/{id}/refresh", s.requireValidVMID(s.handleRefreshStoragePool))
+
+	// ISO library
+	mux.HandleFunc("GET /api/v1/storage/isos", s.handleListIsos)
+	mux.HandleFunc("POST /api/v1/storage/isos", s.handleUploadIso)
+	mux.HandleFunc("DELETE /api/v1/storage/isos/{id}", s.requireValidVMID(s.handleDeleteIso))
 
 	// Networks
 	mux.HandleFunc("GET /api/v1/networks", s.handleListNetworks)
@@ -235,6 +245,62 @@ func (s *Server) handleRefreshStoragePool(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, pool)
+}
+
+// --- iso library ---
+
+func (s *Server) handleListIsos(w http.ResponseWriter, r *http.Request) {
+	isos, err := s.isos.List()
+	if err != nil {
+		s.writeError(w, r, CodeInternalError, "")
+		return
+	}
+	writeJSON(w, http.StatusOK, types.IsoList{Items: isos, Total: len(isos)})
+}
+
+// handleUploadIso streams a multipart upload into the ISO library.
+func (s *Server) handleUploadIso(w http.ResponseWriter, r *http.Request) {
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		s.writeError(w, r, CodeValidationError, "Missing multipart field 'file'")
+		return
+	}
+	defer file.Close()
+
+	name := filepath.Base(header.Filename)
+	if !iso.ValidID.MatchString(name) {
+		s.writeError(w, r, CodeValidationError, "Filename must end in .iso (letters, digits, dot, dash, underscore, space)")
+		return
+	}
+
+	img, err := s.isos.Create(name, file)
+	if err != nil {
+		switch {
+		case errors.Is(err, iso.ErrAlreadyExists):
+			s.writeError(w, r, CodeIsoAlreadyExists, "An ISO image with this filename already exists")
+		case errors.Is(err, os.ErrInvalid):
+			s.writeError(w, r, CodeValidationError, "Invalid ISO filename")
+		default:
+			s.writeError(w, r, CodeInternalError, "")
+		}
+		return
+	}
+	writeJSON(w, http.StatusCreated, img)
+}
+
+func (s *Server) handleDeleteIso(w http.ResponseWriter, r *http.Request) {
+	if err := s.isos.Delete(r.PathValue("id")); err != nil {
+		switch {
+		case errors.Is(err, iso.ErrNotFound):
+			s.writeError(w, r, CodeIsoNotFound, "ISO image was not found")
+		case errors.Is(err, os.ErrInvalid):
+			s.writeError(w, r, CodeValidationError, "Invalid ISO filename")
+		default:
+			s.writeError(w, r, CodeInternalError, "")
+		}
+		return
+	}
+	writeJSON(w, http.StatusNoContent, nil)
 }
 
 // --- networks ---

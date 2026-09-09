@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"mime/multipart"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -10,8 +12,8 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/mock"
 )
 
-func testServer() *Server {
-	return NewServer(mock.New(), testLogger())
+func testServer(t *testing.T) *Server {
+	return NewServer(mock.New(), testIsoStore(t), testLogger())
 }
 
 func get(t *testing.T, s *Server, path string) (*http.Response, map[string]any) {
@@ -37,7 +39,7 @@ func post(t *testing.T, s *Server, path string) (*http.Response, map[string]any)
 }
 
 func TestHealthAndReadiness(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 
 	res, body := get(t, s, "/api/v1/health")
 	if res.StatusCode != 200 || body["status"] != "ok" {
@@ -51,7 +53,7 @@ func TestHealthAndReadiness(t *testing.T) {
 }
 
 func TestHostEndpoint(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 	res, body := get(t, s, "/api/v1/host")
 	if res.StatusCode != 200 {
 		t.Fatalf("status %d", res.StatusCode)
@@ -68,7 +70,7 @@ func TestHostEndpoint(t *testing.T) {
 }
 
 func TestListVMsShape(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 	res, body := get(t, s, "/api/v1/vms")
 	if res.StatusCode != 200 {
 		t.Fatalf("status %d", res.StatusCode)
@@ -83,7 +85,7 @@ func TestListVMsShape(t *testing.T) {
 }
 
 func TestVMOperationsThroughHTTP(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 
 	// 404 with stable error envelope
 	res, body := get(t, s, "/api/v1/vms/nope")
@@ -136,7 +138,7 @@ func postJSON(t *testing.T, s *Server, path string, payload string) (*http.Respo
 }
 
 func TestCreateVM(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 
 	valid := `{"name":"app01","vcpus":2,"memoryBytes":4294967296,"disk":{"poolId":"default","sizeBytes":42949672960,"format":"qcow2"},"networkId":"default","start":false}`
 
@@ -164,7 +166,7 @@ func TestCreateVM(t *testing.T) {
 }
 
 func TestVMIDValidation(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 	res, body := get(t, s, "/api/v1/vms/..%2Fetc%2Fpasswd")
 	if res.StatusCode != 400 {
 		t.Fatalf("expected 400 for traversal id, got %d", res.StatusCode)
@@ -175,7 +177,7 @@ func TestVMIDValidation(t *testing.T) {
 }
 
 func TestRequestIDAndSecurityHeaders(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/host", nil)
 	req.Header.Set("X-Request-Id", "req_my-correlation-id")
 	rec := httptest.NewRecorder()
@@ -190,7 +192,7 @@ func TestRequestIDAndSecurityHeaders(t *testing.T) {
 }
 
 func TestOpenAPIAndDocs(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 
 	res, body := get(t, s, "/openapi.json")
 	if res.StatusCode != 200 {
@@ -216,7 +218,7 @@ func TestOpenAPIAndDocs(t *testing.T) {
 }
 
 func TestUnknownRoute(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 	res, body := get(t, s, "/api/v1/unknown")
 	if res.StatusCode != 404 || body["error"].(map[string]any)["code"] != "NOT_FOUND" {
 		t.Errorf("unknown route: %d %v", res.StatusCode, body)
@@ -230,7 +232,7 @@ func TestUnknownRoute(t *testing.T) {
 }
 
 func TestStoragePoolsAndNetworks(t *testing.T) {
-	s := testServer()
+	s := testServer(t)
 
 	// pools list
 	res, body := get(t, s, "/api/v1/storage/pools")
@@ -287,5 +289,63 @@ func TestStoragePoolsAndNetworks(t *testing.T) {
 	res, _ = post(t, s, "/api/v1/networks/nope/stop")
 	if res.StatusCode != 404 {
 		t.Errorf("stop unknown network: %d", res.StatusCode)
+	}
+}
+
+func TestIsoLibrary(t *testing.T) {
+	s := testServer(t)
+
+	upload := func(name string) (*http.Response, map[string]any) {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		fw, _ := mw.CreateFormFile("file", name)
+		fw.Write([]byte("fake iso content"))
+		mw.Close()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/storage/isos", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		res := rec.Result()
+		var body map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&body)
+		return res, body
+	}
+
+	// invalid filename -> 400
+	res, body := upload("notes.txt")
+	if res.StatusCode != 400 || body["error"].(map[string]any)["code"] != "VALIDATION_ERROR" {
+		t.Fatalf("expected 400, got %d %v", res.StatusCode, body)
+	}
+
+	// upload -> 201
+	res, body = upload("ubuntu-24.04.iso")
+	if res.StatusCode != 201 || body["id"] != "ubuntu-24.04.iso" || body["sizeBytes"] != float64(16) {
+		t.Fatalf("upload: %d %v", res.StatusCode, body)
+	}
+
+	// duplicate -> 409
+	res, body = upload("ubuntu-24.04.iso")
+	if res.StatusCode != 409 || body["error"].(map[string]any)["code"] != "ISO_ALREADY_EXISTS" {
+		t.Fatalf("expected 409, got %d %v", res.StatusCode, body)
+	}
+
+	// list contains it
+	_, body = get(t, s, "/api/v1/storage/isos")
+	if body["total"] != float64(1) {
+		t.Fatalf("list: %v", body)
+	}
+
+	// delete -> 204, then 404
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/storage/isos/ubuntu-24.04.iso", nil)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != 204 {
+		t.Fatalf("expected 204, got %d", rec.Code)
+	}
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/storage/isos/ubuntu-24.04.iso", nil)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != 404 {
+		t.Fatalf("expected 404, got %d", rec.Code)
 	}
 }

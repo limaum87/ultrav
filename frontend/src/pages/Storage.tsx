@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { api, unwrap, ApiError, type StoragePool } from '../api/client';
 import { formatBytes, usePolling } from '../lib/hooks';
+import { IsoLibrary } from '../components/IsoLibrary';
 
 export default function Storage() {
   const [busy, setBusy] = useState<string | null>(null);
@@ -104,6 +105,8 @@ export default function Storage() {
           </tbody>
         </table>
       </div>
+
+      <IsoLibrary />
     </div>
   );
 }

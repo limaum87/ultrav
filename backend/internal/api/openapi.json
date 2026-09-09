@@ -291,6 +291,126 @@
         }
       }
     },
+    "/storage/isos": {
+      "get": {
+        "operationId": "listIsos",
+        "tags": [
+          "Storage"
+        ],
+        "summary": "List ISO images in the library",
+        "description": "ISO images available as installation media. Backed by a dedicated\ndirectory on the host (ULTRAV_ISO_DIR). Files are uploaded via the\nbrowser with `uploadIso`.\n",
+        "responses": {
+          "200": {
+            "description": "ISO images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IsoList"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadIso",
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Upload an ISO image",
+        "description": "Streams the file into the ISO library. The filename must end in `.iso`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "ISO uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Iso"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid file (must be a .iso file)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An ISO with this filename already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/storage/isos/{id}": {
+      "delete": {
+        "operationId": "deleteIso",
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Delete an ISO image",
+        "description": "Removes the file from the ISO library.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "ISO deleted"
+          },
+          "404": {
+            "description": "ISO not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/networks": {
       "get": {
         "operationId": "listNetworks",
@@ -1270,6 +1390,12 @@
             "type": "string",
             "example": "default"
           },
+          "isoId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional ISO from the library to attach as install media (CD-ROM, first boot device).",
+            "example": "ubuntu-24.04-live-server.iso"
+          },
           "start": {
             "type": "boolean",
             "description": "Power on immediately after creation.",
@@ -1301,6 +1427,53 @@
               "raw"
             ],
             "example": "qcow2"
+          }
+        }
+      },
+      "Iso": {
+        "type": "object",
+        "required": [
+          "id",
+          "fileName",
+          "sizeBytes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "ubuntu-24.04-live-server.iso"
+          },
+          "fileName": {
+            "type": "string",
+            "example": "ubuntu-24.04-live-server.iso"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "example": 2197821440
+          },
+          "uploadedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-09-01T12:00:00Z"
+          }
+        }
+      },
+      "IsoList": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Iso"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "example": 2
           }
         }
       },

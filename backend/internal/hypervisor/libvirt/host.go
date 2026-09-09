@@ -19,16 +19,18 @@ import (
 
 // Provider talks to a libvirt daemon.
 type Provider struct {
-	uri string
+	uri    string
+	isoDir string
 
 	mu   sync.Mutex
 	conn *libvirt.Connect
 }
 
 // New creates a provider for the given libvirt URI (e.g. qemu:///system).
+// isoDir backs the ISO library used for install-media attachments.
 // The connection is established lazily and re-established on failure.
-func New(uri string) *Provider {
-	return &Provider{uri: uri}
+func New(uri, isoDir string) *Provider {
+	return &Provider{uri: uri, isoDir: isoDir}
 }
 
 // Ready reports whether a connection to the daemon can be established.

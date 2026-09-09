@@ -53,6 +53,8 @@ var (
 	ErrPoolNotFound = errors.New("storage pool was not found")
 	// ErrNetworkNotFound is returned when the requested network does not exist.
 	ErrNetworkNotFound = errors.New("network was not found")
+	// ErrIsoNotFound is returned when the referenced ISO image does not exist.
+	ErrIsoNotFound = errors.New("ISO image was not found")
 	// ErrInvalidNetworkState is returned when a network operation is not valid
 	// for the current network state (e.g. starting an active network).
 	ErrInvalidNetworkState = errors.New("operation is not valid for the current network state")

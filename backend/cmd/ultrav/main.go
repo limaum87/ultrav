@@ -17,6 +17,7 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/libvirt"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/mock"
+	"github.com/ultrav/ultrav/backend/internal/iso"
 )
 
 func main() {
@@ -36,7 +37,13 @@ func main() {
 	}
 	log.Info("hypervisor provider selected", "provider", cfg.Provider, "uri", cfg.LibvirtURI)
 
-	srv := api.NewServer(provider, log)
+	isos, err := iso.New(cfg.IsoDir)
+	if err != nil {
+		log.Error("failed to create ISO library", "dir", cfg.IsoDir, "err", err)
+		os.Exit(1)
+	}
+
+	srv := api.NewServer(provider, isos, log)
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Handler(),
@@ -72,7 +79,7 @@ func newProvider(p config.Provider, cfg config.Config) (hypervisor.Provider, err
 	case config.ProviderMock:
 		return mock.New(), nil
 	case config.ProviderLibvirt:
-		return libvirt.New(cfg.LibvirtURI), nil
+		return libvirt.New(cfg.LibvirtURI, cfg.IsoDir), nil
 	}
 	return nil, errors.New("unknown provider")
 }

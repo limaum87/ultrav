@@ -138,6 +138,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storage/isos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List ISO images in the library
+         * @description ISO images available as installation media. Backed by a dedicated
+         *     directory on the host (ULTRAV_ISO_DIR). Files are uploaded via the
+         *     browser with `uploadIso`.
+         */
+        get: operations["listIsos"];
+        put?: never;
+        /**
+         * Upload an ISO image
+         * @description Streams the file into the ISO library. The filename must end in `.iso`.
+         */
+        post: operations["uploadIso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/storage/isos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an ISO image
+         * @description Removes the file from the ISO library.
+         */
+        delete: operations["deleteIso"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/networks": {
         parameters: {
             query?: never;
@@ -536,6 +582,11 @@ export interface components {
             /** @example default */
             networkId?: string;
             /**
+             * @description Optional ISO from the library to attach as install media (CD-ROM, first boot device).
+             * @example ubuntu-24.04-live-server.iso
+             */
+            isoId?: string | null;
+            /**
              * @description Power on immediately after creation.
              * @example false
              */
@@ -554,6 +605,27 @@ export interface components {
              * @enum {string}
              */
             format?: "qcow2" | "raw";
+        };
+        Iso: {
+            /** @example ubuntu-24.04-live-server.iso */
+            id: string;
+            /** @example ubuntu-24.04-live-server.iso */
+            fileName: string;
+            /**
+             * Format: int64
+             * @example 2197821440
+             */
+            sizeBytes: number;
+            /**
+             * Format: date-time
+             * @example 2025-09-01T12:00:00Z
+             */
+            uploadedAt?: string;
+        };
+        IsoList: {
+            items: components["schemas"]["Iso"][];
+            /** @example 2 */
+            total: number;
         };
         Disk: {
             /** @example vda */
@@ -908,6 +980,104 @@ export interface operations {
                 };
             };
             /** @description Storage pool not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listIsos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ISO images */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IsoList"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    uploadIso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description ISO uploaded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Iso"];
+                };
+            };
+            /** @description Invalid file (must be a .iso file) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An ISO with this filename already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteIso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource identifier (libvirt name). */
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ISO deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ISO not found */
             404: {
                 headers: {
                     [name: string]: unknown;

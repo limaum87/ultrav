@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	libvirt "libvirt.org/go/libvirt"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
+	"github.com/ultrav/ultrav/backend/internal/iso"
 )
 
 // domainXML is the subset of the libvirt domain XML we consume.
@@ -143,14 +146,43 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		}
 		defer net.Free()
 
+		// Optional install media: resolve the ISO in the library.
+		var isoPath string
+		if req.IsoId != nil && *req.IsoId != "" {
+			if !iso.ValidID.MatchString(*req.IsoId) {
+				return fmt.Errorf("%w: invalid ISO filename", os.ErrInvalid)
+			}
+			path := filepath.Join(p.isoDir, *req.IsoId)
+			if _, err := os.Stat(path); err != nil {
+				return hypervisor.ErrIsoNotFound
+			}
+			isoPath = path
+		}
+
+		// With install media, per-device boot order makes the CD-ROM first.
+		osBoot := "    <boot dev='hd'/>\n"
+		diskBootTag := ""
+		cdrom := ""
+		if isoPath != "" {
+			osBoot = ""
+			diskBootTag = "\n      <boot order='2'/>"
+			cdrom = fmt.Sprintf(`
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='%s'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+      <boot order='1'/>
+    </disk>`, xmlEscape(isoPath))
+		}
+
 		domXML := fmt.Sprintf(`<domain type='kvm'>
   <name>%s</name>
   <memory unit='bytes'>%d</memory>
   <vcpu>%d</vcpu>
   <os>
     <type arch='x86_64' machine='q35'>hvm</type>
-    <boot dev='hd'/>
-  </os>
+%s  </os>
   <features><acpi/><apic/></features>
   <clock offset='utc'/>
   <on_poweroff>destroy</on_poweroff>
@@ -160,15 +192,15 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
     <disk type='file' device='disk'>
       <driver name='qemu' type='%s'/>
       <source file='%s'/>
-      <target dev='vda' bus='virtio'/>
-    </disk>
+      <target dev='vda' bus='virtio'/>%s
+    </disk>%s
     <interface type='network'>
       <source network='%s'/>
       <model type='virtio'/>
     </interface>
     <console type='pty'/>
   </devices>
-</domain>`, xmlEscape(req.Name), req.MemoryBytes, req.Vcpus, format, xmlEscape(volPath), xmlEscape(*req.NetworkId))
+</domain>`, xmlEscape(req.Name), req.MemoryBytes, req.Vcpus, format, xmlEscape(volPath), xmlEscape(*req.NetworkId), osBoot, diskBootTag, cdrom)
 		dom, err := c.DomainDefineXML(domXML)
 		if err != nil {
 			// Best-effort cleanup of the volume we just allocated.

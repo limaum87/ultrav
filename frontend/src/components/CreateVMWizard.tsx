@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, unwrap, ApiError, type StoragePool, type Network } from '../api/client';
+import { api, unwrap, ApiError, type StoragePool, type Network, type Iso } from '../api/client';
 import { formatBytes } from '../lib/hooks';
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
@@ -13,10 +13,11 @@ type Form = {
   diskGiB: number;
   format: 'qcow2' | 'raw';
   networkId: string;
+  isoId: string | null;
   start: boolean;
 };
 
-const STEPS = ['General', 'Storage', 'Network', 'Review'] as const;
+const STEPS = ['General', 'Storage', 'Network', 'Media', 'Review'] as const;
 
 export function CreateVMWizard({
   open,
@@ -32,6 +33,7 @@ export function CreateVMWizard({
   const [error, setError] = useState<string | null>(null);
   const [pools, setPools] = useState<StoragePool[]>([]);
   const [networks, setNetworks] = useState<Network[]>([]);
+  const [isos, setIsos] = useState<Iso[]>([]);
   const [form, setForm] = useState<Form>({
     name: '',
     vcpus: 2,
@@ -40,6 +42,7 @@ export function CreateVMWizard({
     diskGiB: 40,
     format: 'qcow2',
     networkId: 'default',
+    isoId: null,
     start: false,
   });
 
@@ -53,12 +56,14 @@ export function CreateVMWizard({
     setError(null);
     (async () => {
       try {
-        const [p, n] = await Promise.all([
+        const [p, n, i] = await Promise.all([
           unwrap(api.GET('/storage/pools')),
           unwrap(api.GET('/networks')),
+          unwrap(api.GET('/storage/isos')),
         ]);
         setPools(p.items);
         setNetworks(n.items);
+        setIsos(i.items);
         setForm((f) => ({
           ...f,
           poolId: f.poolId || p.items.find((x) => x.state === 'active')?.id || p.items[0]?.id || '',
@@ -71,7 +76,7 @@ export function CreateVMWizard({
   }, [open]);
 
   const stepErrors = useMemo<string[]>(() => {
-    const errs: string[] = ['', '', '', ''];
+    const errs: string[] = ['', '', '', '', ''];
     if (!NAME_RE.test(form.name)) errs[0] = 'Name must start with a letter/digit (a-z0-9._-, max 64 chars)';
     else if (form.vcpus < 1 || form.vcpus > 64) errs[0] = 'vCPUs must be between 1 and 64';
     else if (form.memoryGiB < 0.016) errs[0] = 'Memory must be at least 16 MiB';
@@ -102,6 +107,7 @@ export function CreateVMWizard({
               format: form.format,
             },
             networkId: form.networkId,
+            isoId: form.isoId,
             start: form.start,
           },
         }),
@@ -251,7 +257,52 @@ export function CreateVMWizard({
                   {networks.length === 0 && <option value="">No networks available</option>}
                 </select>
               </label>
-              <label className="field field-check">
+              <p className="wiz-hint">
+                The VM gets one virtio NIC on the selected network.
+              </p>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="wiz-form">
+              <label className="field">
+                <span>Installation media (ISO)</span>
+                <select
+                  value={form.isoId ?? ''}
+                  onChange={(e) => set('isoId', e.target.value || null)}
+                  disabled={submitting}
+                >
+                  <option value="">None — attach later (virt-manager / virt-install)</option>
+                  {isos.map((iso) => (
+                    <option key={iso.id} value={iso.id}>
+                      {iso.fileName} ({formatBytes(iso.sizeBytes, 0)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {isos.length === 0 && (
+                <p className="wiz-hint">
+                  No ISOs in the library yet — upload one in Storage → ISO Library.
+                </p>
+              )}
+              {form.isoId && (
+                <p className="wiz-hint">
+                  The ISO is attached as a SATA CD-ROM and set as the first boot device,
+                  so the VM boots into the installer. You can eject it after install.
+                </p>
+              )}
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="wiz-review">
+              <div className="kv"><span className="kv-key">Name</span><span className="kv-val">{form.name}</span></div>
+              <div className="kv"><span className="kv-key">vCPUs</span><span className="kv-val">{form.vcpus}</span></div>
+              <div className="kv"><span className="kv-key">Memory</span><span className="kv-val">{form.memoryGiB} GiB</span></div>
+              <div className="kv"><span className="kv-key">Disk</span><span className="kv-val">{form.diskGiB} GiB {form.format} · pool “{form.poolId}”</span></div>
+              <div className="kv"><span className="kv-key">Network</span><span className="kv-val">{form.networkId} (virtio)</span></div>
+              <div className="kv"><span className="kv-key">Install media</span><span className="kv-val">{form.isoId ?? 'none'}</span></div>
+              <label className="field field-check" style={{ marginTop: 12 }}>
                 <input
                   type="checkbox"
                   checked={form.start}
@@ -260,25 +311,11 @@ export function CreateVMWizard({
                 />
                 <span>Power on immediately after creation</span>
               </label>
-              <p className="wiz-hint">
-                The VM is defined with a virtio disk and one virtio NIC on the selected network.
-                Attach install media (ISO) via virt-manager/virt-install to install an OS.
-              </p>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="wiz-review">
-              <div className="kv"><span className="kv-key">Name</span><span className="kv-val">{form.name}</span></div>
-              <div className="kv"><span className="kv-key">vCPUs</span><span className="kv-val">{form.vcpus}</span></div>
-              <div className="kv"><span className="kv-key">Memory</span><span className="kv-val">{form.memoryGiB} GiB</span></div>
-              <div className="kv"><span className="kv-key">Disk</span><span className="kv-val">{form.diskGiB} GiB {form.format} · pool “{form.poolId}”</span></div>
-              <div className="kv"><span className="kv-key">Network</span><span className="kv-val">{form.networkId} (virtio)</span></div>
               <div className="kv"><span className="kv-key">Power on</span><span className="kv-val">{form.start ? 'yes' : 'no (left stopped)'}</span></div>
             </div>
           )}
 
-          {stepErrors[step] && step !== 3 && <div className="wiz-error">{stepErrors[step]}</div>}
+          {stepErrors[step] && step !== STEPS.length - 1 && <div className="wiz-error">{stepErrors[step]}</div>}
         </div>
 
         <footer className="wiz-foot">

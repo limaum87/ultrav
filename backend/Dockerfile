@@ -27,5 +27,8 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
 COPY --from=build /out/ultrav /usr/local/bin/ultrav
 ENV ULTRAV_PORT=8080
 EXPOSE 8080
+# ISO library directory: pre-owned by the runtime user so named volumes
+# inherit the right ownership on first mount.
+RUN mkdir -p /var/lib/ultrav/isos && chown -R nobody:nogroup /var/lib/ultrav
 USER nobody
 ENTRYPOINT ["ultrav"]

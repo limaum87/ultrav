@@ -20,6 +20,8 @@ const (
 	CodePoolNotFound        = "STORAGE_POOL_NOT_FOUND"
 	CodeNetworkNotFound     = "NETWORK_NOT_FOUND"
 	CodeNetworkInvalidState = "NETWORK_INVALID_STATE"
+	CodeIsoNotFound         = "ISO_NOT_FOUND"
+	CodeIsoAlreadyExists    = "ISO_ALREADY_EXISTS"
 	CodeInternalError       = "INTERNAL_ERROR"
 )
 
@@ -34,6 +36,8 @@ var errorStatus = map[string]int{
 	CodePoolNotFound:        http.StatusNotFound,
 	CodeNetworkNotFound:     http.StatusNotFound,
 	CodeNetworkInvalidState: http.StatusConflict,
+	CodeIsoNotFound:         http.StatusNotFound,
+	CodeIsoAlreadyExists:    http.StatusConflict,
 	CodeInternalError:       http.StatusInternalServerError,
 }
 
@@ -72,6 +76,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeVMInvalidState, err.Error())
 	case errors.Is(err, hypervisor.ErrVMAlreadyExists):
 		s.writeError(w, r, CodeVMAlreadyExists, "A virtual machine with this name already exists")
+	case errors.Is(err, hypervisor.ErrIsoNotFound):
+		s.writeError(w, r, CodeIsoNotFound, "ISO image was not found")
 	default:
 		s.writeError(w, r, CodeInternalError, "")
 	}

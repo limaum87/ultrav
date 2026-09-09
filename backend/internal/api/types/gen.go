@@ -5,6 +5,8 @@ package types
 
 import (
 	"time"
+
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for DiskBus.
@@ -182,6 +184,20 @@ type HostVirtualization struct {
 	KvmEnabled *bool `json:"kvmEnabled,omitempty"`
 }
 
+// Iso defines model for Iso.
+type Iso struct {
+	FileName   string     `json:"fileName"`
+	Id         string     `json:"id"`
+	SizeBytes  int64      `json:"sizeBytes"`
+	UploadedAt *time.Time `json:"uploadedAt,omitempty"`
+}
+
+// IsoList defines model for IsoList.
+type IsoList struct {
+	Items []Iso `json:"items"`
+	Total int   `json:"total"`
+}
+
 // Network defines model for Network.
 type Network struct {
 	Autostart   bool         `json:"autostart"`
@@ -281,10 +297,13 @@ type VirtualMachine struct {
 
 // VirtualMachineCreate defines model for VirtualMachineCreate.
 type VirtualMachineCreate struct {
-	Disk        DiskCreate `json:"disk"`
-	MemoryBytes int64      `json:"memoryBytes"`
-	Name        string     `json:"name"`
-	NetworkId   *string    `json:"networkId,omitempty"`
+	Disk DiskCreate `json:"disk"`
+
+	// IsoId Optional ISO from the library to attach as install media (CD-ROM, first boot device).
+	IsoId       *string `json:"isoId"`
+	MemoryBytes int64   `json:"memoryBytes"`
+	Name        string  `json:"name"`
+	NetworkId   *string `json:"networkId,omitempty"`
 
 	// Start Power on immediately after creation.
 	Start *bool `json:"start,omitempty"`
@@ -311,6 +330,14 @@ type VMInvalidState = Error
 
 // VMNotFound defines model for VMNotFound.
 type VMNotFound = Error
+
+// UploadIsoMultipartBody defines parameters for UploadIso.
+type UploadIsoMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
+
+// UploadIsoMultipartRequestBody defines body for UploadIso for multipart/form-data ContentType.
+type UploadIsoMultipartRequestBody UploadIsoMultipartBody
 
 // CreateVirtualMachineJSONRequestBody defines body for CreateVirtualMachine for application/json ContentType.
 type CreateVirtualMachineJSONRequestBody = VirtualMachineCreate

@@ -25,6 +25,8 @@ type Config struct {
 	// LibvirtURI is the libvirt connection URI used by the libvirt provider
 	// (e.g. qemu:///system, qemu+ssh://host/system).
 	LibvirtURI string
+	// IsoDir is the directory backing the ISO library.
+	IsoDir string
 }
 
 // Load reads configuration from the environment, applying defaults.
@@ -34,6 +36,7 @@ func Load() (Config, error) {
 		Provider:   Provider(envOr("HYPERVISOR_PROVIDER", string(ProviderMock))),
 		CORSOrigin: os.Getenv("ULTRAV_CORS_ORIGIN"),
 		LibvirtURI: envOr("HYPERVISOR_LIBVIRT_URI", "qemu:///system"),
+		IsoDir:     envOr("ULTRAV_ISO_DIR", "/var/lib/libvirt/images/isos"),
 	}
 	switch cfg.Provider {
 	case ProviderMock, ProviderLibvirt:
