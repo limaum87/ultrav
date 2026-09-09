@@ -1,0 +1,6 @@
+# oapi-codegen configuration — Go types generated from the OpenAPI contract.
+# Regenerate with: ./scripts/generate.sh
+package: types
+output: internal/api/types/gen.go
+generate:
+  models: true

@@ -1,0 +1,584 @@
+openapi: 3.1.0
+info:
+  title: UltraV API
+  version: 1.0.0
+  summary: API-first KVM/QEMU virtual machine management
+  description: |
+    UltraV is a modern, simple, API-first management layer for KVM/QEMU
+    virtual machines on single Linux hosts.
+
+    **Everything is an API.** Every UI capability is available here first.
+    This contract is the source of truth for the Web UI, CLI, scripts,
+    automation, and future AI agents (MCP adapters).
+
+    ## Conventions
+    - All requests/responses are JSON.
+    - Every response includes an `X-Request-Id` header; errors also include `requestId` in the body.
+    - Errors use a stable envelope: `{"error": {"code", "message", "requestId"}}`.
+    - Destructive or long-running operations will use specific, semantically
+      named operations (never generic `execute`/`command` endpoints).
+  license:
+    name: TBD
+servers:
+  - url: /api/v1
+    description: Local host (single-node)
+
+tags:
+  - name: Host
+    description: Host status and capabilities
+  - name: Virtual Machines
+    description: VM inventory and power operations
+  - name: Storage
+    description: Storage pools
+  - name: Network
+    description: Virtual networks
+  - name: Health
+    description: Liveness and readiness probes
+
+paths:
+  /host:
+    get:
+      operationId: getHost
+      tags: [Host]
+      summary: Get host status
+      description: Returns status and identity of the hypervisor host.
+      responses:
+        '200':
+          description: Host status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Host' }
+              example:
+                hostname: kvm01
+                operatingSystem: Ubuntu 24.04 LTS
+                kernel: 6.8.0-45-generic
+                uptimeSeconds: 128934
+                cpu: { model: AMD EPYC 7402P 24-Core Processor, cores: 24, threads: 48, usagePercent: 23.5 }
+                memoryTotalBytes: 68719476736
+                memoryUsedBytes: 21474836480
+                virtualization: { kvmEnabled: true }
+                qemuVersion: 8.2.0
+                libvirtVersion: 10.0.0
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /capabilities:
+    get:
+      operationId: getCapabilities
+      tags: [Host]
+      summary: Get host capabilities
+      description: >
+        Feature discovery for UI, automation and agents. Clients must use
+        this to know what the host supports instead of hardcoding assumptions.
+      responses:
+        '200':
+          description: Host capabilities
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Capabilities' }
+              example:
+                virtualization: { kvm: true, uefi: true }
+                storage: { qcow2: true, raw: true, snapshots: true }
+                features: { backup: false, migration: false, cloudInit: false }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Liveness probe
+      description: Checks only that the application process is alive. Always returns 200 while the process is up.
+      responses:
+        '200':
+          description: Application is alive
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+              example: { status: ok }
+
+  /ready:
+    get:
+      operationId: getReadiness
+      tags: [Health]
+      summary: Readiness probe
+      description: Checks that the application and the HypervisorProvider are ready to serve requests.
+      responses:
+        '200':
+          description: Ready to serve traffic
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+              example: { status: ready, hypervisor: ready }
+        '503':
+          description: Not ready (e.g. hypervisor provider unavailable)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+              example: { status: not-ready, hypervisor: unavailable }
+
+  /storage/pools:
+    get:
+      operationId: listStoragePools
+      tags: [Storage]
+      summary: List storage pools
+      responses:
+        '200':
+          description: Storage pools
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoragePoolList' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /storage/pools/{id}:
+    get:
+      operationId: getStoragePool
+      tags: [Storage]
+      summary: Get a storage pool
+      parameters: [ { $ref: '#/components/parameters/ResourceID' } ]
+      responses:
+        '200':
+          description: Storage pool details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoragePool' }
+        '404':
+          description: Storage pool not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /storage/pools/{id}/refresh:
+    post:
+      operationId: refreshStoragePool
+      tags: [Storage]
+      summary: Refresh a storage pool
+      description: Re-syncs the pool's volume list and usage numbers with the backing storage.
+      parameters: [ { $ref: '#/components/parameters/ResourceID' } ]
+      responses:
+        '200':
+          description: Pool refreshed (returns updated pool)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoragePool' }
+        '404':
+          description: Storage pool not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /networks:
+    get:
+      operationId: listNetworks
+      tags: [Network]
+      summary: List virtual networks
+      responses:
+        '200':
+          description: Virtual networks
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkList' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /networks/{id}:
+    get:
+      operationId: getNetwork
+      tags: [Network]
+      summary: Get a virtual network
+      parameters: [ { $ref: '#/components/parameters/ResourceID' } ]
+      responses:
+        '200':
+          description: Network details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Network' }
+        '404':
+          description: Network not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /networks/{id}/start:
+    post:
+      operationId: startNetwork
+      tags: [Network]
+      summary: Start a virtual network
+      parameters: [ { $ref: '#/components/parameters/ResourceID' } ]
+      responses:
+        '200':
+          description: Network started (returns updated network)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Network' }
+        '404':
+          description: Network not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Network is already active
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /networks/{id}/stop:
+    post:
+      operationId: stopNetwork
+      tags: [Network]
+      summary: Stop a virtual network
+      description: |
+        Stops the virtual network. Running VMs attached to it keep working but
+        lose new DHCP leases and NAT until the network is started again.
+      parameters: [ { $ref: '#/components/parameters/ResourceID' } ]
+      responses:
+        '200':
+          description: Network stopped (returns updated network)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Network' }
+        '404':
+          description: Network not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Network is already inactive
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /vms:
+    get:
+      operationId: listVirtualMachines
+      tags: [Virtual Machines]
+      summary: List virtual machines
+      responses:
+        '200':
+          description: Virtual machines
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachineList' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /vms/{id}:
+    get:
+      operationId: getVirtualMachine
+      tags: [Virtual Machines]
+      summary: Get a virtual machine
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      responses:
+        '200':
+          description: Virtual machine details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /vms/{id}/start:
+    post:
+      operationId: startVirtualMachine
+      tags: [Virtual Machines]
+      summary: Start a virtual machine
+      description: Powers on a stopped virtual machine. Returns 409 if already running.
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      responses:
+        '200':
+          description: VM started (returns updated VM)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /vms/{id}/shutdown:
+    post:
+      operationId: shutdownVirtualMachine
+      tags: [Virtual Machines]
+      summary: Gracefully shut down a virtual machine
+      description: Sends an ACPI shutdown event. The guest OS should shut down cleanly.
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      responses:
+        '200':
+          description: Shutdown requested (returns updated VM)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /vms/{id}/reboot:
+    post:
+      operationId: rebootVirtualMachine
+      tags: [Virtual Machines]
+      summary: Reboot a virtual machine
+      description: Sends an ACPI reboot event. Returns 409 if the VM is not running.
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      responses:
+        '200':
+          description: Reboot requested (returns updated VM)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /vms/{id}/stop:
+    post:
+      operationId: forceStopVirtualMachine
+      tags: [Virtual Machines]
+      summary: Force stop a virtual machine
+      description: |
+        Immediately powers off the VM, equivalent to pulling the power cable.
+        The guest OS is not given a chance to shut down cleanly; data loss or
+        filesystem corruption is possible. Prefer `shutdownVirtualMachine`.
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      responses:
+        '200':
+          description: VM force stopped (returns updated VM)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  parameters:
+    VMId:
+      name: id
+      in: path
+      required: true
+      description: Virtual machine identifier (name).
+      schema: { type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$', example: erp01 }
+
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      description: Resource identifier (libvirt name).
+      schema: { type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$', example: default }
+
+  responses:
+    VMNotFound:
+      description: Virtual machine not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: { code: VM_NOT_FOUND, message: Virtual machine was not found, requestId: req_01HV3M9Z2K }
+    VMInvalidState:
+      description: Operation not valid for the current VM state
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: { code: VM_INVALID_STATE, message: Virtual machine is not running, requestId: req_01HV3M9Z2L }
+    InternalError:
+      description: Internal server error (no internal details are exposed)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: { code: INTERNAL_ERROR, message: An internal error occurred, requestId: req_01HV3M9Z2M }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string, example: VM_NOT_FOUND }
+            message: { type: string, example: Virtual machine was not found }
+            requestId: { type: string, example: req_01HV3M9Z2K }
+
+    Host:
+      type: object
+      required: [hostname, operatingSystem, kernel, uptimeSeconds, cpu, memoryTotalBytes, memoryUsedBytes]
+      properties:
+        hostname: { type: string, example: kvm01 }
+        operatingSystem: { type: string, example: Ubuntu 24.04 LTS }
+        kernel: { type: string, example: 6.8.0-45-generic }
+        uptimeSeconds: { type: integer, example: 128934 }
+        cpu: { $ref: '#/components/schemas/Cpu' }
+        memoryTotalBytes: { type: integer, format: int64, example: 68719476736 }
+        memoryUsedBytes: { type: integer, format: int64, example: 21474836480 }
+        virtualization: { $ref: '#/components/schemas/HostVirtualization' }
+        storageTotalBytes: { type: integer, format: int64, example: 2199023255552 }
+        storageUsedBytes: { type: integer, format: int64, example: 789128484864 }
+        qemuVersion: { type: string, example: 8.2.0 }
+        libvirtVersion: { type: string, example: 10.0.0 }
+
+    Cpu:
+      type: object
+      required: [model, cores, threads]
+      properties:
+        model: { type: string, example: AMD EPYC 7402P 24-Core Processor }
+        cores: { type: integer, example: 24 }
+        threads: { type: integer, example: 48 }
+        usagePercent: { type: number, format: float, example: 23.5 }
+
+    HostVirtualization:
+      type: object
+      properties:
+        kvmEnabled: { type: boolean, example: true }
+
+    VirtualMachineList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VirtualMachine' }
+        total: { type: integer, example: 4 }
+
+    Network:
+      type: object
+      required: [id, name, state, autostart, dhcpEnabled]
+      properties:
+        id: { type: string, example: default }
+        name: { type: string, example: default }
+        state: { type: string, enum: [active, inactive], example: active }
+        autostart: { type: boolean, example: true }
+        bridge: { type: string, nullable: true, example: virbr0 }
+        ipAddress: { type: string, nullable: true, example: 10.0.0.1 }
+        ipPrefix: { type: integer, nullable: true, example: 24 }
+        dhcpEnabled: { type: boolean, example: true }
+        domainName: { type: string, nullable: true, example: default }
+
+    NetworkList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Network' }
+        total: { type: integer, example: 2 }
+
+    StoragePool:
+      type: object
+      required: [id, name, type, state, capacityBytes, allocationBytes, availableBytes]
+      properties:
+        id: { type: string, example: default }
+        name: { type: string, example: default }
+        type: { type: string, enum: [dir, fs, netfs, lvm, disk, iscsi, zfs, rbd, other], example: dir }
+        state: { type: string, enum: [active, inactive], example: active }
+        autostart: { type: boolean, example: true }
+        capacityBytes: { type: integer, format: int64, example: 2199023255552 }
+        allocationBytes: { type: integer, format: int64, example: 789128484864 }
+        availableBytes: { type: integer, format: int64, example: 1409894770688 }
+        targetPath: { type: string, nullable: true, example: /var/lib/libvirt/images }
+
+    StoragePoolList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/StoragePool' }
+        total: { type: integer, example: 2 }
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok], example: ok }
+
+    Readiness:
+      type: object
+      required: [status, hypervisor]
+      properties:
+        status: { type: string, enum: [ready, not-ready], example: ready }
+        hypervisor: { type: string, enum: [ready, unavailable], example: ready }
+
+    Capabilities:
+      type: object
+      required: [virtualization, storage, features]
+      properties:
+        virtualization: { $ref: '#/components/schemas/CapabilitiesVirtualization' }
+        storage: { $ref: '#/components/schemas/CapabilitiesStorage' }
+        features: { $ref: '#/components/schemas/CapabilitiesFeatures' }
+
+    CapabilitiesVirtualization:
+      type: object
+      required: [kvm, uefi]
+      properties:
+        kvm: { type: boolean }
+        uefi: { type: boolean }
+
+    CapabilitiesStorage:
+      type: object
+      required: [qcow2, raw, snapshots]
+      properties:
+        qcow2: { type: boolean }
+        raw: { type: boolean }
+        snapshots: { type: boolean }
+
+    CapabilitiesFeatures:
+      type: object
+      required: [backup, migration, cloudInit]
+      properties:
+        backup: { type: boolean, example: false }
+        migration: { type: boolean, example: false }
+        cloudInit: { type: boolean, example: false }
+
+    VMState:
+      type: string
+      enum: [running, stopped, paused, shutting-down, starting, error]
+      description: |
+        - running: powered on and operational
+        - stopped: powered off
+        - shutting-down: graceful shutdown in progress
+        - starting: power-on in progress
+
+    Disk:
+      type: object
+      required: [name, format, sizeBytes]
+      properties:
+        name: { type: string, example: vda }
+        format: { type: string, enum: [qcow2, raw], example: qcow2 }
+        sizeBytes: { type: integer, format: int64, example: 128849018880 }
+        bus: { type: string, enum: [virtio, sata, scsi], example: virtio }
+
+    NetworkInterface:
+      type: object
+      required: [name, model]
+      properties:
+        name: { type: string, example: ens3 }
+        model: { type: string, enum: [virtio, e1000, rtl8139], example: virtio }
+        macAddress: { type: string, example: '52:54:00:a1:b2:c3' }
+        ipAddress: { type: string, example: 10.0.0.11 }
+        network: { type: string, example: default }
+
+    VirtualMachine:
+      type: object
+      required: [id, name, state, vcpus, memoryBytes, uptimeSeconds, disks, networkInterfaces]
+      properties:
+        id: { type: string, example: erp01 }
+        name: { type: string, example: erp01 }
+        state: { $ref: '#/components/schemas/VMState' }
+        vcpus: { type: integer, example: 4 }
+        memoryBytes: { type: integer, format: int64, example: 8589934592 }
+        uptimeSeconds: { type: integer, nullable: true, example: 345600 }
+        os: { type: string, example: Ubuntu 24.04 LTS }
+        ipAddress: { type: string, nullable: true, example: 10.0.0.11 }
+        disks:
+          type: array
+          items: { $ref: '#/components/schemas/Disk' }
+        networkInterfaces:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkInterface' }
+        bootTime:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2025-09-01T12:00:00Z'

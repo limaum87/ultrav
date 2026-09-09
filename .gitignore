@@ -1,0 +1,22 @@
+# Dependências
+node_modules/
+frontend/node_modules/
+
+# Builds
+backend/ultrav
+backend/bin/
+frontend/dist/
+
+# Go
+*.test
+coverage.out
+
+# Ambiente / local
+.env
+*.local
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+frontend/tsconfig.tsbuildinfo
