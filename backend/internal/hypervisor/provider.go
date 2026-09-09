@@ -6,6 +6,7 @@ package hypervisor
 import (
 	"context"
 	"errors"
+	"net"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
 )
@@ -27,6 +28,10 @@ type Provider interface {
 	CreateVirtualMachine(ctx context.Context, req types.VirtualMachineCreate) (types.VirtualMachine, error)
 
 	StartVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
+	// OpenVMConsole returns a live stream (VNC/RFB) to the VM's graphical
+	// console. The caller owns the connection and must Close it. Returns
+	// ErrVMInvalidState when the VM is not running.
+	OpenVMConsole(ctx context.Context, id string) (net.Conn, error)
 	ShutdownVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 	RebootVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 	ForceStopVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)

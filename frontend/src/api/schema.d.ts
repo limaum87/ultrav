@@ -354,6 +354,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/vms/{id}/console": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open the VM graphical console (WebSocket)
+         * @description Upgrades the connection to a WebSocket and proxies binary frames to the
+         *     VM's graphical console (VNC/RFB). The browser side is a noVNC client;
+         *     binary messages are raw VNC octets. Requires a running VM (409 otherwise).
+         *     Note: this endpoint is a WebSocket — OpenAPI cannot fully describe the
+         *     upgraded protocol.
+         */
+        get: operations["openVMConsole"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/vms/{id}/shutdown": {
         parameters: {
             query?: never;
@@ -1573,6 +1597,30 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VirtualMachine"];
                 };
+            };
+            404: components["responses"]["VMNotFound"];
+            409: components["responses"]["VMInvalidState"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    openVMConsole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Virtual machine identifier (name). */
+                id: components["parameters"]["VMId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching Protocols — WebSocket established, frames are raw VNC */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: components["responses"]["VMNotFound"];
             409: components["responses"]["VMInvalidState"];

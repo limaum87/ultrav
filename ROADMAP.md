@@ -33,7 +33,7 @@
 - [ ] Snapshots
 - [ ] Cloud-init
 - [ ] Templates e clone
-- [ ] Console web (noVNC/WebSocket)
+- [x] Console web (noVNC/WebSocket) — `GET /vms/{id}/console` (WS → VNC via OpenGraphicsFD), noVNC na UI, mock fala RFB
 - [ ] Validação em host KVM real
 
 ## Phase 3 — Backup engine

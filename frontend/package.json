@@ -10,6 +10,7 @@
     "generate:api": "openapi-typescript ../docs/api/openapi.yaml -o src/api/schema.d.ts"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.7.0",
     "lucide-react": "^1.43.0",
     "openapi-fetch": "^0.13.4",
     "react": "^18.3.1",

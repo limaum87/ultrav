@@ -62,6 +62,8 @@ func (s *Server) routes() {
 	mux.HandleFunc("POST /api/v1/vms/{id}/shutdown", s.requireValidVMID(s.handleShutdownVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/reboot", s.requireValidVMID(s.handleRebootVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/stop", s.requireValidVMID(s.handleForceStopVM))
+	// WebSocket (noVNC) — proxied to the VM's graphical console.
+	mux.HandleFunc("GET /api/v1/vms/{id}/console", s.requireValidVMID(s.handleVMConsole))
 
 	// Storage pools
 	mux.HandleFunc("GET /api/v1/storage/pools", s.handleListStoragePools)

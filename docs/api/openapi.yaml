@@ -485,6 +485,25 @@ paths:
         '409': { $ref: '#/components/responses/VMInvalidState' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /vms/{id}/console:
+    get:
+      operationId: openVMConsole
+      tags: [Virtual Machines]
+      summary: Open the VM graphical console (WebSocket)
+      description: |
+        Upgrades the connection to a WebSocket and proxies binary frames to the
+        VM's graphical console (VNC/RFB). The browser side is a noVNC client;
+        binary messages are raw VNC octets. Requires a running VM (409 otherwise).
+        Note: this endpoint is a WebSocket — OpenAPI cannot fully describe the
+        upgraded protocol.
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      responses:
+        '101':
+          description: Switching Protocols — WebSocket established, frames are raw VNC
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /vms/{id}/shutdown:
     post:
       operationId: shutdownVirtualMachine

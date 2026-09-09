@@ -873,6 +873,35 @@
         }
       }
     },
+    "/vms/{id}/console": {
+      "get": {
+        "operationId": "openVMConsole",
+        "tags": [
+          "Virtual Machines"
+        ],
+        "summary": "Open the VM graphical console (WebSocket)",
+        "description": "Upgrades the connection to a WebSocket and proxies binary frames to the\nVM's graphical console (VNC/RFB). The browser side is a noVNC client;\nbinary messages are raw VNC octets. Requires a running VM (409 otherwise).\nNote: this endpoint is a WebSocket \u2014 OpenAPI cannot fully describe the\nupgraded protocol.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VMId"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols \u2014 WebSocket established, frames are raw VNC"
+          },
+          "404": {
+            "$ref": "#/components/responses/VMNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/VMInvalidState"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/vms/{id}/shutdown": {
       "post": {
         "operationId": "shutdownVirtualMachine",

@@ -14,6 +14,7 @@ import {
   type MenuItem,
 } from '../components/ui';
 import { InfoCard, Tabs } from '../components/Tabs';
+import { ConsolePanel } from '../components/ConsolePanel';
 import { useToast } from '../components/Toast';
 import {
   Play, Power, RotateCcw, SquareTerminal, OctagonX, Trash2,
@@ -24,8 +25,8 @@ type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Monitor },
-  // TODO(backend): console requires a websocket/noVNC proxy endpoint.
-  { id: 'console', label: 'Console', disabled: true },
+  { id: 'console', label: 'Console', icon: SquareTerminal },
+  // TODO(backend): snapshots and backups are roadmap items (phases 3-5).
   { id: 'hardware', label: 'Hardware', icon: Cpu },
   { id: 'disks', label: 'Disks', icon: HardDrive },
   { id: 'network', label: 'Network', icon: ArrowDownUp },
@@ -114,7 +115,12 @@ export default function VMDetails() {
             <RotateCcw size={14} strokeWidth={2} aria-hidden /> Reboot
           </button>
           <ActionMenu items={menu} label="More actions" />
-          <button className="btn btn-with-icon" disabled title="Console access is not available yet">
+          <button
+            className="btn btn-with-icon"
+            disabled={vm.state !== 'running'}
+            onClick={() => setTab('console')}
+            title={vm.state === 'running' ? 'Open the graphical console' : 'Console requires a running VM'}
+          >
             <SquareTerminal size={14} strokeWidth={2} aria-hidden /> Open Console
           </button>
         </div>
@@ -130,6 +136,7 @@ export default function VMDetails() {
       />
 
       {tab === 'overview' && <Overview vm={vm} />}
+      {tab === 'console' && <ConsolePanel vm={vm} />}
       {tab === 'hardware' && <Hardware vm={vm} />}
       {tab === 'disks' && <Disks vm={vm} />}
       {tab === 'network' && <NetworkTab vm={vm} />}
