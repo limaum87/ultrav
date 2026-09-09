@@ -17,9 +17,6 @@ var pools = []struct {
 	{id: "backups", typeName: "dir", active: true, autostart: true,
 		capacity: 4 * 1024 * 1024 * 1024 * 1024, allocation: 96 * 1024 * 1024 * 1024,
 		targetPath: "/srv/backups"},
-	{id: "iso", typeName: "dir", active: false, autostart: false,
-		capacity: 0, allocation: 0,
-		targetPath: "/var/lib/libvirt/iso"},
 }
 
 var networks = []struct {

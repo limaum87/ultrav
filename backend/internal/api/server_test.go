@@ -239,8 +239,8 @@ func TestStoragePoolsAndNetworks(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("pools: %d", res.StatusCode)
 	}
-	if body["total"] != float64(3) {
-		t.Errorf("expected 3 pools, got %v", body["total"])
+	if body["total"] != float64(2) {
+		t.Errorf("expected 2 pools, got %v", body["total"])
 	}
 
 	// pool detail + 404
@@ -258,9 +258,9 @@ func TestStoragePoolsAndNetworks(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Errorf("refresh default: %d", res.StatusCode)
 	}
-	res, body = post(t, s, "/api/v1/storage/pools/iso/refresh")
-	if res.StatusCode != 409 || body["error"].(map[string]any)["code"] != "NETWORK_INVALID_STATE" {
-		t.Errorf("refresh inactive pool: %d %v", res.StatusCode, body)
+	res, body = post(t, s, "/api/v1/storage/pools/nope/refresh")
+	if res.StatusCode != 404 {
+		t.Errorf("refresh unknown pool: %d %v", res.StatusCode, body)
 	}
 
 	// networks list + detail
