@@ -21,7 +21,7 @@ import (
 type Provider struct {
 	uri string
 
-	mu  sync.Mutex
+	mu   sync.Mutex
 	conn *libvirt.Connect
 }
 
@@ -92,6 +92,7 @@ func (p *Provider) GetHost(_ context.Context) (types.Host, error) {
 		kvmEnabled := true
 		memTotal := int64(ni.Memory) * 1024 // NodeInfo.Memory is in KiB
 		memUsed := readMemUsed(memTotal)
+		storTotal, storUsed := sumStoragePools(c)
 
 		host = types.Host{
 			Hostname:        hostname,
@@ -104,11 +105,13 @@ func (p *Provider) GetHost(_ context.Context) (types.Host, error) {
 				Threads:      int(ni.Threads * ni.Sockets * ni.Cores),
 				UsagePercent: &cpuUsage,
 			},
-			MemoryTotalBytes: memTotal,
-			MemoryUsedBytes:  memUsed,
-			Virtualization:   &types.HostVirtualization{KvmEnabled: &kvmEnabled},
-			QemuVersion:      qemuVersion(c),
-			LibvirtVersion:   strPtr(formatLibvirtVersion(libVer)),
+			MemoryTotalBytes:  memTotal,
+			MemoryUsedBytes:   memUsed,
+			StorageTotalBytes: &storTotal,
+			StorageUsedBytes:  &storUsed,
+			Virtualization:    &types.HostVirtualization{KvmEnabled: &kvmEnabled},
+			QemuVersion:       qemuVersion(c),
+			LibvirtVersion:    strPtr(formatLibvirtVersion(libVer)),
 		}
 		return nil
 	})
@@ -134,6 +137,25 @@ func (p *Provider) GetCapabilities(_ context.Context) (types.Capabilities, error
 		return nil
 	})
 	return caps, err
+}
+
+// sumStoragePools aggregates capacity and allocation across ACTIVE storage
+// pools (inactive pools report 0/0 from libvirt and would skew totals down,
+// while capacity-only aggregation would overstate available space).
+func sumStoragePools(c *libvirt.Connect) (total, used int64) {
+	pools, err := c.ListAllStoragePools(libvirt.CONNECT_LIST_STORAGE_POOLS_ACTIVE)
+	if err != nil {
+		return 0, 0
+	}
+	for i := range pools {
+		info, err := pools[i].GetInfo()
+		if err != nil {
+			continue
+		}
+		total += int64(info.Capacity)
+		used += int64(info.Allocation)
+	}
+	return total, used
 }
 
 // --- local OS helpers (host-local reads; no shell, no injection surface) ---
