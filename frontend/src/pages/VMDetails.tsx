@@ -15,20 +15,24 @@ import {
 } from '../components/ui';
 import { InfoCard, Tabs } from '../components/Tabs';
 import { useToast } from '../components/Toast';
+import {
+  Play, Power, RotateCcw, SquareTerminal, OctagonX, Trash2,
+  Cpu, MemoryStick, HardDrive, ArrowDownUp, Monitor, Settings2,
+} from 'lucide-react';
 
 type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
 
 const TABS = [
-  { id: 'overview', label: 'Overview' },
+  { id: 'overview', label: 'Overview', icon: Monitor },
   // TODO(backend): console requires a websocket/noVNC proxy endpoint.
   { id: 'console', label: 'Console', disabled: true },
-  { id: 'hardware', label: 'Hardware' },
-  { id: 'disks', label: 'Disks' },
-  { id: 'network', label: 'Network' },
+  { id: 'hardware', label: 'Hardware', icon: Cpu },
+  { id: 'disks', label: 'Disks', icon: HardDrive },
+  { id: 'network', label: 'Network', icon: ArrowDownUp },
   // TODO(backend): snapshots and backups are roadmap items (phases 3-5).
   { id: 'snapshots', label: 'Snapshots', disabled: true },
   { id: 'backups', label: 'Backups', disabled: true },
-  { id: 'settings', label: 'Settings' },
+  { id: 'settings', label: 'Settings', icon: Settings2 },
 ];
 
 export default function VMDetails() {
@@ -78,11 +82,12 @@ export default function VMDetails() {
   }
 
   const running = vm.state === 'running';
+  const mi = (Icon: typeof Play) => <Icon size={14} strokeWidth={1.75} aria-hidden />;
   const menu: MenuItem[] = [
-    { label: 'Force Stop', danger: true, onSelect: () => setConfirm('stop'), disabled: busy || !running, title: 'Pull the power cable — data loss possible' },
+    { label: 'Force Stop', icon: mi(OctagonX), danger: true, onSelect: () => setConfirm('stop'), disabled: busy || !running, title: 'Pull the power cable — data loss possible' },
     { kind: 'separator' },
     // TODO(backend): no DELETE /vms/{id} endpoint yet.
-    { label: 'Delete', danger: true, disabled: true, title: 'VM deletion is not available yet' },
+    { label: 'Delete', icon: mi(Trash2), danger: true, disabled: true, title: 'VM deletion is not available yet' },
   ];
 
   return (
@@ -93,28 +98,36 @@ export default function VMDetails() {
       <header className="page-head vm-detail-head">
         <div>
           <h1 className="vm-title">
+            <Monitor size={22} className="vm-title-icon" strokeWidth={1.75} aria-hidden />
             {vm.name} <StateBadge state={vm.state} />
           </h1>
           <p className="subtitle">{vm.os ?? 'Unknown guest OS'}</p>
         </div>
         <div className="vm-detail-actions">
-          <button className="btn" disabled={busy || running || vm.state !== 'stopped'} onClick={() => void runAction('start')} title="Power on">
-            Start
+          <button className="btn btn-with-icon" disabled={busy || running || vm.state !== 'stopped'} onClick={() => void runAction('start')} title="Power on">
+            <Play size={14} strokeWidth={2} aria-hidden /> Start
           </button>
-          <button className="btn" disabled={busy || !running} onClick={() => void runAction('shutdown')} title="Graceful ACPI shutdown">
-            Shutdown
+          <button className="btn btn-with-icon" disabled={busy || !running} onClick={() => void runAction('shutdown')} title="Graceful ACPI shutdown">
+            <Power size={14} strokeWidth={2} aria-hidden /> Shutdown
           </button>
-          <button className="btn" disabled={busy || !running} onClick={() => void runAction('reboot')} title="Graceful ACPI reboot">
-            Reboot
+          <button className="btn btn-with-icon" disabled={busy || !running} onClick={() => void runAction('reboot')} title="Graceful ACPI reboot">
+            <RotateCcw size={14} strokeWidth={2} aria-hidden /> Reboot
           </button>
           <ActionMenu items={menu} label="More actions" />
-          <button className="btn" disabled title="Console access is not available yet">
-            Open Console
+          <button className="btn btn-with-icon" disabled title="Console access is not available yet">
+            <SquareTerminal size={14} strokeWidth={2} aria-hidden /> Open Console
           </button>
         </div>
       </header>
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      <Tabs
+        tabs={TABS.map(({ icon: Icon, ...t }) => ({
+          ...t,
+          icon: Icon ? <Icon size={14} strokeWidth={1.75} aria-hidden /> : undefined,
+        }))}
+        active={tab}
+        onChange={setTab}
+      />
 
       {tab === 'overview' && <Overview vm={vm} />}
       {tab === 'hardware' && <Hardware vm={vm} />}
@@ -138,33 +151,32 @@ export default function VMDetails() {
 /* ---------- tabs ---------- */
 
 function Overview({ vm }: { vm: VirtualMachine }) {
-  const memAlloc = vm.memoryBytes;
   return (
     <>
       <section className="metric-grid">
         <MetricCard
           label="CPU Usage"
-          value={<ProgressCellUnavailable />}
+          value={<span className="metric-unavailable">n/a</span>}
           hint={`${vm.vcpus} vCPU allocated`}
-          used={null}
+          icon={<Cpu size={24} className="ic ic-electric" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
           label="Memory Usage"
-          value={formatBytes(memAlloc, 1)}
+          value={formatBytes(vm.memoryBytes, 1)}
           hint="allocated (guest usage not exposed by the API)"
-          used={null}
+          icon={<MemoryStick size={24} className="ic ic-violet" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
           label="Disk Usage"
           value={formatBytes(vm.disks.reduce((s, d) => s + d.sizeBytes, 0), 1)}
           hint={`${vm.disks.length} disk(s) · capacity (used space not exposed)`}
-          used={null}
+          icon={<HardDrive size={24} className="ic ic-purple" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
           label="Network"
           value={<span className="metric-unavailable">n/a</span>}
           hint="rx/tx throughput not exposed by the API"
-          used={null}
+          icon={<ArrowDownUp size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
         />
       </section>
       {/* Historical graphs need a metrics endpoint (e.g. GET /vms/{id}/metrics) */}
@@ -201,10 +213,6 @@ function Overview({ vm }: { vm: VirtualMachine }) {
       </section>
     </>
   );
-}
-
-function ProgressCellUnavailable() {
-  return <span className="metric-unavailable">n/a</span>;
 }
 
 function Hardware({ vm }: { vm: VirtualMachine }) {

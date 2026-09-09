@@ -13,7 +13,10 @@ import {
   type MenuItem,
 } from '../components/ui';
 import { CreateVMWizard } from '../components/CreateVMWizard';
-import { Boxes, CirclePlay, Cpu, MemoryStick, HardDrive, Monitor } from 'lucide-react';
+import {
+  Boxes, CirclePlay, Cpu, MemoryStick, HardDrive, Monitor,
+  ExternalLink, SquareTerminal, Play, Power, RotateCcw, OctagonX, Trash2,
+} from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
@@ -103,18 +106,19 @@ export default function VirtualMachines() {
   const vmMenu = (vm: VirtualMachine): MenuItem[] => {
     const runningState = vm.state === 'running';
     const startable = vm.state === 'stopped' || vm.state === 'error';
+    const mi = (Icon: typeof Play) => <Icon size={14} strokeWidth={1.75} aria-hidden />;
     return [
-      { label: 'Open', to: `/vms/${vm.id}` },
+      { label: 'Open', icon: mi(ExternalLink), to: `/vms/${vm.id}` },
       // TODO(backend): no console endpoint yet (requires websocket/noVNC proxy).
-      { label: 'Open Console', disabled: true, title: 'Console access is not available yet' },
+      { label: 'Open Console', icon: mi(SquareTerminal), disabled: true, title: 'Console access is not available yet' },
       { kind: 'separator' },
-      { label: 'Start', onSelect: () => void runAction(vm, 'start'), disabled: busy === vm.id || !startable, title: startable ? 'Power on' : 'VM is not stopped' },
-      { label: 'Shutdown', onSelect: () => void runAction(vm, 'shutdown'), disabled: busy === vm.id || !runningState, title: 'Graceful ACPI shutdown' },
-      { label: 'Reboot', onSelect: () => void runAction(vm, 'reboot'), disabled: busy === vm.id || !runningState, title: 'Graceful ACPI reboot' },
+      { label: 'Start', icon: mi(Play), onSelect: () => void runAction(vm, 'start'), disabled: busy === vm.id || !startable, title: startable ? 'Power on' : 'VM is not stopped' },
+      { label: 'Shutdown', icon: mi(Power), onSelect: () => void runAction(vm, 'shutdown'), disabled: busy === vm.id || !runningState, title: 'Graceful ACPI shutdown' },
+      { label: 'Reboot', icon: mi(RotateCcw), onSelect: () => void runAction(vm, 'reboot'), disabled: busy === vm.id || !runningState, title: 'Graceful ACPI reboot' },
       { kind: 'separator' },
-      { label: 'Force Stop', danger: true, onSelect: () => setConfirm({ vm, action: 'stop' }), disabled: busy === vm.id || !runningState, title: 'Pull the power cable — data loss possible' },
+      { label: 'Force Stop', icon: mi(OctagonX), danger: true, onSelect: () => setConfirm({ vm, action: 'stop' }), disabled: busy === vm.id || !runningState, title: 'Pull the power cable — data loss possible' },
       // TODO(backend): no DELETE /vms/{id} endpoint yet.
-      { label: 'Delete', danger: true, disabled: true, title: 'VM deletion is not available yet' },
+      { label: 'Delete', icon: mi(Trash2), danger: true, disabled: true, title: 'VM deletion is not available yet' },
     ];
   };
 

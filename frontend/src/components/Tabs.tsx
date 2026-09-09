@@ -3,6 +3,8 @@ import { type ReactNode } from 'react';
 export interface TabDef {
   id: string;
   label: string;
+  /** Optional Lucide icon rendered beside the label. */
+  icon?: ReactNode;
   /** Rendered as a disabled tab when the feature has no backend yet. */
   disabled?: boolean;
   title?: string;
@@ -32,6 +34,7 @@ export function Tabs({
             className={`tab${active === t.id ? ' active' : ''}`}
             onClick={() => onChange(t.id)}
           >
+            {t.icon}
             {t.label}
           </button>
         ),

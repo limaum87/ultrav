@@ -930,3 +930,12 @@ tr.row-busy { opacity: 0.55; }
 /* --- subtle contrast lifts --- */
 .subtitle { color: var(--text-dim); }
 .cell-sub, .host-sub { color: var(--text-dim); }
+
+/* --- Phase 2 visual polish: tab icons, icon buttons, detail header --- */
+.tab { display: inline-flex; align-items: center; gap: 7px; }
+.tab svg { color: var(--text-faint); }
+.tab.active svg { color: var(--accent); }
+.btn-with-icon { display: inline-flex; align-items: center; gap: 7px; }
+.btn-with-icon svg { color: var(--text-dim); }
+.btn-with-icon:hover:not(:disabled) svg { color: var(--text); }
+.vm-title-icon { color: var(--text-faint); }
