@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { api, unwrap, ApiError, type VirtualMachine } from '../api/client';
 import { formatBytes, formatUptime, usePolling } from '../lib/hooks';
 import { StateBadge, VmActions } from '../components/ui';
+import { CreateVMWizard } from '../components/CreateVMWizard';
 
 export default function VirtualMachines() {
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const { data, error, loading, refresh } = usePolling(async () =>
     unwrap(api.GET('/vms')),
   );
@@ -39,7 +41,16 @@ export default function VirtualMachines() {
           <h1>Virtual Machines</h1>
           <p className="subtitle">{data.total} machines on this host</p>
         </div>
+        <button className="btn btn-primary" onClick={() => setWizardOpen(true)}>
+          + New VM
+        </button>
       </header>
+
+      <CreateVMWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={() => void refresh()}
+      />
 
       {actionError && <div className="alert error">{actionError}</div>}
 

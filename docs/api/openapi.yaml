@@ -262,6 +262,47 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/VirtualMachineList' }
         '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      operationId: createVirtualMachine
+      tags: [Virtual Machines]
+      summary: Create a virtual machine
+      description: |
+        Defines a new virtual machine: allocates a disk volume in the chosen
+        storage pool and defines the domain (left stopped unless `start` is
+        true). The VM is not booted from an OS image — attach installation
+        media with virt-install/virt-manager afterwards if needed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VirtualMachineCreate' }
+            example:
+              name: app01
+              vcpus: 2
+              memoryBytes: 4294967296
+              disk:
+                poolId: default
+                sizeBytes: 42949672960
+                format: qcow2
+              networkId: default
+              start: false
+      responses:
+        '201':
+          description: Virtual machine created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '400':
+          description: Invalid create specification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: A virtual machine with this name already exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /vms/{id}:
     get:
@@ -539,6 +580,36 @@ components:
         - stopped: powered off
         - shutting-down: graceful shutdown in progress
         - starting: power-on in progress
+
+    VirtualMachineCreate:
+      type: object
+      required: [name, vcpus, memoryBytes, disk]
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$'
+          example: app01
+        vcpus: { type: integer, minimum: 1, maximum: 64, example: 2 }
+        memoryBytes:
+          type: integer
+          format: int64
+          minimum: 16777216
+          example: 4294967296
+        disk: { $ref: '#/components/schemas/DiskCreate' }
+        networkId: { type: string, example: default }
+        start: { type: boolean, description: Power on immediately after creation., example: false }
+
+    DiskCreate:
+      type: object
+      required: [poolId, sizeBytes]
+      properties:
+        poolId: { type: string, example: default }
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1048576
+          example: 42949672960
+        format: { type: string, enum: [qcow2, raw], example: qcow2 }
 
     Disk:
       type: object

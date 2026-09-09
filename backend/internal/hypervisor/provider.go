@@ -21,6 +21,10 @@ type Provider interface {
 
 	ListVirtualMachines(ctx context.Context) ([]types.VirtualMachine, error)
 	GetVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
+	// CreateVirtualMachine defines a new VM (volume + domain). Returns
+	// ErrVMAlreadyExists if the name is taken, ErrPoolNotFound for an unknown
+	// storage pool, ErrNetworkNotFound for an unknown network.
+	CreateVirtualMachine(ctx context.Context, req types.VirtualMachineCreate) (types.VirtualMachine, error)
 
 	StartVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 	ShutdownVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
@@ -40,6 +44,8 @@ type Provider interface {
 var (
 	// ErrVMNotFound is returned when the requested VM does not exist.
 	ErrVMNotFound = errVMNotFound{}
+	// ErrVMAlreadyExists is returned when creating a VM whose name is taken.
+	ErrVMAlreadyExists = errors.New("a virtual machine with this name already exists")
 	// ErrInvalidVMState is returned when an operation is not valid for the
 	// current VM state (e.g. starting an already running VM).
 	ErrInvalidVMState = errInvalidVMState{}

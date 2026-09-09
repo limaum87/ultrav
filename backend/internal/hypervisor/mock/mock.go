@@ -66,6 +66,9 @@ type vmState struct {
 	state     types.VMState
 	bootTime  time.Time // zero when not running
 	ipAddress string    // empty when not running
+	// disks overrides the disk list derived from spec (used by created VMs);
+	// nil means "derive from spec".
+	disks []types.Disk
 }
 
 // Provider is an in-memory simulated KVM host.
@@ -186,6 +189,51 @@ func (p *Provider) GetVirtualMachine(_ context.Context, id string) (types.Virtua
 	return p.toModel(vm), nil
 }
 
+// CreateVirtualMachine defines a new simulated VM in the stopped state
+// (or running when start is true), deriving an IP/MAC from the fleet size.
+func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMachineCreate) (types.VirtualMachine, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if _, ok := p.vms[req.Name]; ok {
+		return types.VirtualMachine{}, hypervisor.ErrVMAlreadyExists
+	}
+	n := len(p.vms) + 1
+	mac := fmt.Sprintf("52:54:00:00:%02x:%02x", n/256, n%256)
+	ip := fmt.Sprintf("10.0.0.%d", 20+n)
+	format := types.DiskFormatQcow2
+	if req.Disk.Format != nil {
+		format = types.DiskFormat(*req.Disk.Format)
+	}
+	bus := types.DiskBusVirtio
+
+	st := &vmState{
+		spec: vmSpec{
+			id:     req.Name,
+			vcpus:  req.Vcpus,
+			memory: req.MemoryBytes,
+			os:     "—",
+			diskGB: int(req.Disk.SizeBytes / (1024 * 1024 * 1024)),
+			ip:     ip,
+			mac:    mac,
+		},
+		state: types.VMStateStopped,
+	}
+	st.disks = []types.Disk{{
+		Name:      "vda",
+		Format:    format,
+		SizeBytes: req.Disk.SizeBytes,
+		Bus:       &bus,
+	}}
+	if req.Start != nil && *req.Start {
+		st.state = types.VMStateRunning
+		st.bootTime = time.Now()
+		st.ipAddress = ip
+	}
+	p.vms[req.Name] = st
+	return p.toModel(st), nil
+}
+
 // StartVirtualMachine powers on a stopped VM.
 func (p *Provider) StartVirtualMachine(_ context.Context, id string) (types.VirtualMachine, error) {
 	p.mu.Lock()
@@ -302,19 +350,22 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		Vcpus:   vm.spec.vcpus,
 		MemoryBytes: vm.spec.memory,
 		Os:      &vm.spec.os,
-		Disks: []types.Disk{{
+		Disks:   vm.disks,
+	}
+	if vm.disks == nil {
+		m.Disks = []types.Disk{{
 			Name:      "vda",
-			Format:    types.Qcow2,
+			Format:    types.DiskFormatQcow2,
 			SizeBytes: int64(vm.spec.diskGB) * 1024 * 1024 * 1024,
 			Bus:       ptr(types.DiskBusVirtio),
-		}},
-		NetworkInterfaces: []types.NetworkInterface{{
-			Name:       "ens3",
-			Model:      types.NetworkInterfaceModelVirtio,
-			MacAddress: &vm.spec.mac,
-			Network:    ptr("default"),
-		}},
+		}}
 	}
+	m.NetworkInterfaces = []types.NetworkInterface{{
+		Name:       "ens3",
+		Model:      types.NetworkInterfaceModelVirtio,
+		MacAddress: &vm.spec.mac,
+		Network:    ptr("default"),
+	}}
 	if vm.state == types.VMStateRunning || vm.state == types.VMStateShuttingDown {
 		uptime := int(time.Since(vm.bootTime).Seconds())
 		m.UptimeSeconds = &uptime

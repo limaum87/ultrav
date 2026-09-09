@@ -220,7 +220,14 @@ export interface paths {
         /** List virtual machines */
         get: operations["listVirtualMachines"];
         put?: never;
-        post?: never;
+        /**
+         * Create a virtual machine
+         * @description Defines a new virtual machine: allocates a disk volume in the chosen
+         *     storage pool and defines the domain (left stopped unless `start` is
+         *     true). The VM is not booted from an OS image — attach installation
+         *     media with virt-install/virt-manager afterwards if needed.
+         */
+        post: operations["createVirtualMachine"];
         delete?: never;
         options?: never;
         head?: never;
@@ -515,6 +522,39 @@ export interface components {
          * @enum {string}
          */
         VMState: "running" | "stopped" | "paused" | "shutting-down" | "starting" | "error";
+        VirtualMachineCreate: {
+            /** @example app01 */
+            name: string;
+            /** @example 2 */
+            vcpus: number;
+            /**
+             * Format: int64
+             * @example 4294967296
+             */
+            memoryBytes: number;
+            disk: components["schemas"]["DiskCreate"];
+            /** @example default */
+            networkId?: string;
+            /**
+             * @description Power on immediately after creation.
+             * @example false
+             */
+            start?: boolean;
+        };
+        DiskCreate: {
+            /** @example default */
+            poolId: string;
+            /**
+             * Format: int64
+             * @example 42949672960
+             */
+            sizeBytes: number;
+            /**
+             * @example qcow2
+             * @enum {string}
+             */
+            format?: "qcow2" | "raw";
+        };
         Disk: {
             /** @example vda */
             name: string;
@@ -1033,6 +1073,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VirtualMachineList"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createVirtualMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "app01",
+                 *       "vcpus": 2,
+                 *       "memoryBytes": 4294967296,
+                 *       "disk": {
+                 *         "poolId": "default",
+                 *         "sizeBytes": 42949672960,
+                 *         "format": "qcow2"
+                 *       },
+                 *       "networkId": "default",
+                 *       "start": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["VirtualMachineCreate"];
+            };
+        };
+        responses: {
+            /** @description Virtual machine created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualMachine"];
+                };
+            };
+            /** @description Invalid create specification */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A virtual machine with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             500: components["responses"]["InternalError"];

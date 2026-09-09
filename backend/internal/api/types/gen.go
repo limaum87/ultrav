@@ -16,8 +16,14 @@ const (
 
 // Defines values for DiskFormat.
 const (
-	Qcow2 DiskFormat = "qcow2"
-	Raw   DiskFormat = "raw"
+	DiskFormatQcow2 DiskFormat = "qcow2"
+	DiskFormatRaw   DiskFormat = "raw"
+)
+
+// Defines values for DiskCreateFormat.
+const (
+	DiskCreateFormatQcow2 DiskCreateFormat = "qcow2"
+	DiskCreateFormatRaw   DiskCreateFormat = "raw"
 )
 
 // Defines values for HealthStatus.
@@ -127,6 +133,16 @@ type DiskBus string
 
 // DiskFormat defines model for Disk.Format.
 type DiskFormat string
+
+// DiskCreate defines model for DiskCreate.
+type DiskCreate struct {
+	Format    *DiskCreateFormat `json:"format,omitempty"`
+	PoolId    string            `json:"poolId"`
+	SizeBytes int64             `json:"sizeBytes"`
+}
+
+// DiskCreateFormat defines model for DiskCreate.Format.
+type DiskCreateFormat string
 
 // Error defines model for Error.
 type Error struct {
@@ -263,6 +279,18 @@ type VirtualMachine struct {
 	Vcpus         int     `json:"vcpus"`
 }
 
+// VirtualMachineCreate defines model for VirtualMachineCreate.
+type VirtualMachineCreate struct {
+	Disk        DiskCreate `json:"disk"`
+	MemoryBytes int64      `json:"memoryBytes"`
+	Name        string     `json:"name"`
+	NetworkId   *string    `json:"networkId,omitempty"`
+
+	// Start Power on immediately after creation.
+	Start *bool `json:"start,omitempty"`
+	Vcpus int   `json:"vcpus"`
+}
+
 // VirtualMachineList defines model for VirtualMachineList.
 type VirtualMachineList struct {
 	Items []VirtualMachine `json:"items"`
@@ -283,3 +311,6 @@ type VMInvalidState = Error
 
 // VMNotFound defines model for VMNotFound.
 type VMNotFound = Error
+
+// CreateVirtualMachineJSONRequestBody defines body for CreateVirtualMachine for application/json ContentType.
+type CreateVirtualMachineJSONRequestBody = VirtualMachineCreate

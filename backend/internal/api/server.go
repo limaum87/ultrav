@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -48,6 +49,7 @@ func (s *Server) routes() {
 
 	// Virtual machines
 	mux.HandleFunc("GET /api/v1/vms", s.handleListVMs)
+	mux.HandleFunc("POST /api/v1/vms", s.handleCreateVM)
 	mux.HandleFunc("GET /api/v1/vms/{id}", s.requireValidVMID(s.handleGetVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/start", s.requireValidVMID(s.handleStartVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/shutdown", s.requireValidVMID(s.handleShutdownVM))
@@ -134,6 +136,46 @@ func (s *Server) handleGetVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, vm)
+}
+
+// handleCreateVM validates and creates a new virtual machine.
+func (s *Server) handleCreateVM(w http.ResponseWriter, r *http.Request) {
+	var req types.VirtualMachineCreate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, r, CodeValidationError, "Invalid JSON body")
+		return
+	}
+	if msg := validateCreateVM(&req); msg != "" {
+		s.writeError(w, r, CodeValidationError, msg)
+		return
+	}
+	vm, err := s.provider.CreateVirtualMachine(r.Context(), req)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, vm)
+}
+
+// validateCreateVM enforces the contract constraints not covered by the
+// pattern-validated path parameters (body has no generated validation).
+func validateCreateVM(req *types.VirtualMachineCreate) string {
+	if !vmIDPattern.MatchString(req.Name) {
+		return "Invalid virtual machine name"
+	}
+	if req.Vcpus < 1 || req.Vcpus > 64 {
+		return "vcpus must be between 1 and 64"
+	}
+	if req.MemoryBytes < 16*1024*1024 {
+		return "memoryBytes must be at least 16 MiB"
+	}
+	if req.Disk.PoolId == "" {
+		return "disk.poolId is required"
+	}
+	if req.Disk.SizeBytes < 1024*1024 {
+		return "disk.sizeBytes must be at least 1 MiB"
+	}
+	return ""
 }
 
 // vmAction adapts a power operation to a handler.

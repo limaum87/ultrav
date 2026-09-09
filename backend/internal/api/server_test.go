@@ -123,6 +123,46 @@ func TestVMOperationsThroughHTTP(t *testing.T) {
 	}
 }
 
+func postJSON(t *testing.T, s *Server, path string, payload string) (*http.Response, map[string]any) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res := rec.Result()
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	return res, body
+}
+
+func TestCreateVM(t *testing.T) {
+	s := testServer()
+
+	valid := `{"name":"app01","vcpus":2,"memoryBytes":4294967296,"disk":{"poolId":"default","sizeBytes":42949672960,"format":"qcow2"},"networkId":"default","start":false}`
+
+	// invalid body -> 400
+	res, body := postJSON(t, s, "/api/v1/vms", `{"name":"bad name!","vcpus":2,"memoryBytes":4294967296,"disk":{"poolId":"d","sizeBytes":1}}`)
+	if res.StatusCode != 400 || body["error"].(map[string]any)["code"] != "VALIDATION_ERROR" {
+		t.Fatalf("expected 400 VALIDATION_ERROR, got %d %v", res.StatusCode, body)
+	}
+
+	// create -> 201, stopped, visible in list
+	res, body = postJSON(t, s, "/api/v1/vms", valid)
+	if res.StatusCode != 201 || body["id"] != "app01" || body["state"] != "stopped" {
+		t.Fatalf("create: %d %v", res.StatusCode, body)
+	}
+	_, body = get(t, s, "/api/v1/vms/app01")
+	if body["id"] != "app01" {
+		t.Fatalf("created VM not listed")
+	}
+
+	// duplicate -> 409 VM_ALREADY_EXISTS
+	res, body = postJSON(t, s, "/api/v1/vms", valid)
+	if res.StatusCode != 409 || body["error"].(map[string]any)["code"] != "VM_ALREADY_EXISTS" {
+		t.Fatalf("expected 409 VM_ALREADY_EXISTS, got %d %v", res.StatusCode, body)
+	}
+}
+
 func TestVMIDValidation(t *testing.T) {
 	s := testServer()
 	res, body := get(t, s, "/api/v1/vms/..%2Fetc%2Fpasswd")

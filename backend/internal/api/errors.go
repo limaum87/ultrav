@@ -13,6 +13,7 @@ import (
 const (
 	CodeVMNotFound          = "VM_NOT_FOUND"
 	CodeVMInvalidState      = "VM_INVALID_STATE"
+	CodeVMAlreadyExists     = "VM_ALREADY_EXISTS"
 	CodeValidationError     = "VALIDATION_ERROR"
 	CodeNotFound            = "NOT_FOUND"
 	CodeMethodNotAllowed    = "METHOD_NOT_ALLOWED"
@@ -26,6 +27,7 @@ const (
 var errorStatus = map[string]int{
 	CodeVMNotFound:          http.StatusNotFound,
 	CodeVMInvalidState:      http.StatusConflict,
+	CodeVMAlreadyExists:     http.StatusConflict,
 	CodeValidationError:     http.StatusBadRequest,
 	CodeNotFound:            http.StatusNotFound,
 	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
@@ -68,6 +70,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeNetworkInvalidState, err.Error())
 	case errors.Is(err, hypervisor.ErrInvalidVMState):
 		s.writeError(w, r, CodeVMInvalidState, err.Error())
+	case errors.Is(err, hypervisor.ErrVMAlreadyExists):
+		s.writeError(w, r, CodeVMAlreadyExists, "A virtual machine with this name already exists")
 	default:
 		s.writeError(w, r, CodeInternalError, "")
 	}

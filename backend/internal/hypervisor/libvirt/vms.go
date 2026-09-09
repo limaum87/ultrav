@@ -92,6 +92,110 @@ func (p *Provider) ListVirtualMachines(_ context.Context) ([]types.VirtualMachin
 	return out, err
 }
 
+// CreateVirtualMachine allocates a disk volume in the requested storage
+// pool and defines the domain (stopped, or started when req.Start is true).
+func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMachineCreate) (types.VirtualMachine, error) {
+	format := "qcow2"
+	if req.Disk.Format != nil {
+		format = string(*req.Disk.Format)
+	}
+	if req.NetworkId == nil || *req.NetworkId == "" {
+		def := "default"
+		req.NetworkId = &def
+	}
+
+	err := p.withConn(func(c *libvirt.Connect) error {
+		// Refuse to redefine an existing domain.
+		if dom, err := c.LookupDomainByName(req.Name); err == nil {
+			dom.Free()
+			return hypervisor.ErrVMAlreadyExists
+		}
+
+		pool, err := c.LookupStoragePoolByName(req.Disk.PoolId)
+		if err != nil {
+			return hypervisor.ErrPoolNotFound
+		}
+		if active, err := pool.IsActive(); err == nil && !active {
+			pool.Refresh(0)
+		}
+
+		volXML := fmt.Sprintf(`<volume type='file'>
+  <name>%s.%s</name>
+  <capacity unit='bytes'>%d</capacity>
+  <target>
+    <format type='%s'/>
+  </target>
+</volume>`, req.Name, format, req.Disk.SizeBytes, format)
+		vol, err := pool.StorageVolCreateXML(volXML, 0)
+		if err != nil {
+			return fmt.Errorf("create volume: %w", err)
+		}
+		defer vol.Free()
+		volPath, err := vol.GetPath()
+		if err != nil {
+			return fmt.Errorf("resolve volume path: %w", err)
+		}
+
+		// Validate the network reference so a bad networkId fails fast.
+		net, err := c.LookupNetworkByName(*req.NetworkId)
+		if err != nil {
+			return hypervisor.ErrNetworkNotFound
+		}
+		defer net.Free()
+
+		domXML := fmt.Sprintf(`<domain type='kvm'>
+  <name>%s</name>
+  <memory unit='bytes'>%d</memory>
+  <vcpu>%d</vcpu>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features><acpi/><apic/></features>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='%s'/>
+      <source file='%s'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <interface type='network'>
+      <source network='%s'/>
+      <model type='virtio'/>
+    </interface>
+    <console type='pty'/>
+  </devices>
+</domain>`, xmlEscape(req.Name), req.MemoryBytes, req.Vcpus, format, xmlEscape(volPath), xmlEscape(*req.NetworkId))
+		dom, err := c.DomainDefineXML(domXML)
+		if err != nil {
+			// Best-effort cleanup of the volume we just allocated.
+			_ = vol.Delete(0)
+			return fmt.Errorf("define domain: %w", err)
+		}
+		defer dom.Free()
+		if req.Start != nil && *req.Start {
+			if err := dom.Create(); err != nil {
+				return fmt.Errorf("start domain: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return types.VirtualMachine{}, err
+	}
+	return p.GetVirtualMachine(context.Background(), req.Name)
+}
+
+// xmlEscape escapes a string for embedding in XML attribute values.
+func xmlEscape(s string) string {
+	var b strings.Builder
+	xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
+
 func (p *Provider) GetVirtualMachine(_ context.Context, id string) (types.VirtualMachine, error) {
 	var vm types.VirtualMachine
 	err := p.withConn(func(c *libvirt.Connect) error {
@@ -312,9 +416,9 @@ func normalizeBytes(value int64, unit string) int64 {
 
 func diskFormat(t string) types.DiskFormat {
 	if t == "raw" {
-		return types.Raw
+		return types.DiskFormatRaw
 	}
-	return types.Qcow2
+	return types.DiskFormatQcow2
 }
 
 func diskBus(b string) *types.DiskBus {
