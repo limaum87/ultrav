@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, unwrap, ApiError, type HostBridgeList } from '../api/client';
+import { Network as NetworkIcon, X, Plus } from 'lucide-react';
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const IFACE_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,15}$/;
@@ -70,9 +71,14 @@ export function CreateNetworkModal({
     <div className="wiz-overlay" role="dialog" aria-modal="true" aria-label="Create virtual network">
       <div className="wiz">
         <header className="wiz-head">
-          <h2>Create Virtual Network</h2>
+          <div className="wiz-head-title">
+            <span className="wiz-head-icon ic-bg-green">
+              <NetworkIcon size={18} className="ic ic-green" aria-hidden />
+            </span>
+            <h2>Create Network</h2>
+          </div>
           <button className="wiz-close" onClick={onClose} aria-label="Close" disabled={submitting}>
-            ×
+            <X size={16} aria-hidden />
           </button>
         </header>
 
@@ -214,7 +220,8 @@ network:
           <button className="btn" onClick={onClose} disabled={submitting}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={() => void submit()} disabled={!valid || submitting}>
+          <button className="btn btn-primary btn-with-icon" onClick={() => void submit()} disabled={!valid || submitting}>
+            <Plus size={14} strokeWidth={2} aria-hidden />
             {submitting ? 'Creating…' : 'Create Network'}
           </button>
         </footer>

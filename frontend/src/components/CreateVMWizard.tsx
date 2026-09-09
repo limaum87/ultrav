@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, unwrap, ApiError, type StoragePool, type Network, type Iso } from '../api/client';
 import { formatBytes } from '../lib/hooks';
+import { Monitor, Check, X, Rocket } from 'lucide-react';
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const GiB = 1024 * 1024 * 1024;
@@ -131,9 +132,14 @@ export function CreateVMWizard({
     <div className="wiz-overlay" role="dialog" aria-modal="true" aria-label="Create virtual machine">
       <div className="wiz">
         <header className="wiz-head">
-          <h2>Create Virtual Machine</h2>
+          <div className="wiz-head-title">
+            <span className="wiz-head-icon ic-bg-violet">
+              <Monitor size={18} className="ic ic-violet" aria-hidden />
+            </span>
+            <h2>Create Virtual Machine</h2>
+          </div>
           <button className="wiz-close" onClick={onClose} aria-label="Close" disabled={submitting}>
-            ×
+            <X size={16} aria-hidden />
           </button>
         </header>
 
@@ -144,7 +150,7 @@ export function CreateVMWizard({
               className={i === step ? 'current' : i < step ? 'done' : ''}
               onClick={() => i < step && setStep(i)}
             >
-              <span className="wiz-step-num">{i < step ? '✓' : i + 1}</span>
+              <span className="wiz-step-num">{i < step ? <Check size={11} strokeWidth={3} aria-hidden /> : i + 1}</span>
               {label}
             </li>
           ))}
@@ -330,10 +336,11 @@ export function CreateVMWizard({
             )}
             {last ? (
               <button
-                className="btn btn-primary"
+                className="btn btn-primary btn-with-icon"
                 onClick={() => void submit()}
                 disabled={submitting || poolFull}
               >
+                <Rocket size={14} strokeWidth={2} aria-hidden />
                 {submitting ? 'Creating…' : 'Create VM'}
               </button>
             ) : (
@@ -342,7 +349,7 @@ export function CreateVMWizard({
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canNext || submitting}
               >
-                Next →
+                Next
               </button>
             )}
           </div>

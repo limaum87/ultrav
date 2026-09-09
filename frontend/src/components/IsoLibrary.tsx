@@ -1,9 +1,14 @@
 import { useRef, useState } from 'react';
 import { api, unwrap, ApiError, uploadIso, type Iso } from '../api/client';
 import { usePolling } from '../lib/hooks';
+import { useToast } from './Toast';
+import { Disc, Upload, Trash2, TriangleAlert } from 'lucide-react';
+import { ActionMenu, ConfirmDialog, type MenuItem } from './ui';
 
 /** ISO Library card: list, upload (with progress) and delete. */
 export function IsoLibrary() {
+  const toast = useToast();
+  const [confirmDel, setConfirmDel] = useState<Iso | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -24,9 +29,11 @@ export function IsoLibrary() {
     setPct(0);
     try {
       await uploadIso(file, setPct);
+      toast.push('success', `${file.name}: upload complete`);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      toast.push('error', `${file.name}: upload failed`);
     } finally {
       setUploading(null);
       if (fileRef.current) fileRef.current.value = '';
@@ -34,23 +41,28 @@ export function IsoLibrary() {
   };
 
   const del = async (iso: Iso) => {
-    if (!window.confirm(`Delete "${iso.fileName}" from the ISO library?`)) return;
     setDeleting(iso.id);
     setError(null);
     try {
       await unwrap(api.DELETE('/storage/isos/{id}', { params: { path: { id: iso.id } } }));
+      toast.push('success', `${iso.fileName}: deleted`);
       await refresh();
     } catch (e) {
-      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : String(e));
+      const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
+      setError(msg);
+      toast.push('error', `${iso.fileName}: ${msg}`);
     } finally {
       setDeleting(null);
+      setConfirmDel(null);
     }
   };
 
   return (
     <div className="card iso-card">
       <div className="iso-head">
-        <h3 className="card-title" style={{ margin: 0 }}>ISO Library</h3>
+        <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
+          <Disc size={15} className="ic ic-purple" aria-hidden /> ISO Library
+        </h3>
         <input
           ref={fileRef}
           type="file"
@@ -58,8 +70,9 @@ export function IsoLibrary() {
           hidden
           onChange={(e) => void onFile(e.target.files?.[0])}
         />
-        <button className="btn btn-primary" onClick={pickFile} disabled={uploading != null}>
-          {uploading != null ? `Uploading ${pct}%` : '↑ Upload ISO'}
+        <button className="btn btn-primary btn-with-icon" onClick={pickFile} disabled={uploading != null}>
+          <Upload size={14} strokeWidth={2} aria-hidden />
+          {uploading != null ? `Uploading ${pct}%` : 'Upload ISO'}
         </button>
       </div>
 
@@ -68,7 +81,11 @@ export function IsoLibrary() {
           <div className="iso-progress-fill" style={{ width: `${pct}%` }} />
         </div>
       )}
-      {error && <div className="alert error" style={{ marginTop: 12 }}>{error}</div>}
+      {error && (
+        <div className="alert error" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 9 }}>
+          <TriangleAlert size={14} aria-hidden /> {error}
+        </div>
+      )}
 
       <table className="table">
         <thead>
@@ -85,16 +102,19 @@ export function IsoLibrary() {
               <td className="mono">{iso.fileName}</td>
               <td>{formatSize(iso.sizeBytes)}</td>
               <td>{iso.uploadedAt ? new Date(iso.uploadedAt).toLocaleString() : '—'}</td>
-              <td>
-                <div className="actions">
-                  <button
-                    className="btn btn-danger"
-                    disabled={deleting === iso.id || uploading != null}
-                    onClick={() => void del(iso)}
-                  >
-                    Delete
-                  </button>
-                </div>
+              <td className="td-actions">
+                <ActionMenu
+                  items={[
+                    {
+                      label: 'Delete',
+                      icon: <Trash2 size={14} strokeWidth={1.75} aria-hidden />,
+                      danger: true,
+                      disabled: deleting === iso.id || uploading != null,
+                      onSelect: () => setConfirmDel(iso),
+                    },
+                  ] as MenuItem[]}
+                  label={`Actions for ${iso.fileName}`}
+                />
               </td>
             </tr>
           ))}
@@ -107,6 +127,16 @@ export function IsoLibrary() {
           )}
         </tbody>
       </table>
+
+      <ConfirmDialog
+        open={confirmDel != null}
+        title={`Delete "${confirmDel?.fileName ?? ''}"?`}
+        message={<>The ISO file will be permanently removed from the library. VMs currently using it as install media will be affected.</>}
+        confirmLabel="Delete"
+        busy={confirmDel != null && deleting === confirmDel.id}
+        onCancel={() => setConfirmDel(null)}
+        onConfirm={() => confirmDel && void del(confirmDel)}
+      />
     </div>
   );
 }
