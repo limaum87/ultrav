@@ -349,3 +349,38 @@ func TestIsoLibrary(t *testing.T) {
 		t.Fatalf("expected 404, got %d", rec.Code)
 	}
 }
+
+func TestCreateStoragePool(t *testing.T) {
+	s := testServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/storage/pools",
+		strings.NewReader(`{"name":"iso-store","targetPath":"/var/lib/libvirt/isos","autostart":true}`))
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res := rec.Result()
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	if res.StatusCode != 201 || body["id"] != "iso-store" || body["state"] != "active" {
+		t.Errorf("create: %d %v", res.StatusCode, body)
+	}
+
+	// duplicate -> 409 STORAGE_POOL_ALREADY_EXISTS
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/storage/pools",
+		strings.NewReader(`{"name":"iso-store","targetPath":"/var/lib/libvirt/isos"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res = rec.Result()
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	if res.StatusCode != 409 {
+		t.Errorf("duplicate: %d %v", res.StatusCode, body)
+	}
+
+	// invalid path -> 400
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/storage/pools",
+		strings.NewReader(`{"name":"bad","targetPath":"relative/path"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 400 {
+		t.Errorf("invalid path: expected 400, got %d", rec.Result().StatusCode)
+	}
+}

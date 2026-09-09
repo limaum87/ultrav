@@ -368,3 +368,6 @@ h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
   transition: width 0.2s ease;
 }
 .iso-empty { color: var(--text-faint); text-align: center; padding: 24px 8px; }
+
+/* Create pool modal */
+.field-error { color: var(--danger, #e5484d); font-size: 12px; }

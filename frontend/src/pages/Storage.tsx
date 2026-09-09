@@ -2,10 +2,12 @@ import { useCallback, useState } from 'react';
 import { api, unwrap, ApiError, type StoragePool } from '../api/client';
 import { formatBytes, usePolling } from '../lib/hooks';
 import { IsoLibrary } from '../components/IsoLibrary';
+import { CreatePoolModal } from '../components/CreatePoolModal';
 
 export default function Storage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [poolModalOpen, setPoolModalOpen] = useState(false);
   const { data, error, loading, refresh } = usePolling(async () =>
     unwrap(api.GET('/storage/pools')),
   );
@@ -36,6 +38,9 @@ export default function Storage() {
           <h1>Storage</h1>
           <p className="subtitle">{data.total} storage pools on this host</p>
         </div>
+        <button className="btn btn-primary" onClick={() => setPoolModalOpen(true)}>
+          + Add Pool
+        </button>
       </header>
 
       {actionError && <div className="alert error">{actionError}</div>}
@@ -107,6 +112,12 @@ export default function Storage() {
       </div>
 
       <IsoLibrary />
+
+      <CreatePoolModal
+        open={poolModalOpen}
+        onClose={() => setPoolModalOpen(false)}
+        onCreated={() => void refresh()}
+      />
     </div>
   );
 }

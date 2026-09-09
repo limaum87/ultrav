@@ -33,6 +33,7 @@ type Provider interface {
 
 	ListStoragePools(ctx context.Context) ([]types.StoragePool, error)
 	GetStoragePool(ctx context.Context, id string) (types.StoragePool, error)
+	CreateStoragePool(ctx context.Context, req types.StoragePoolCreate) (types.StoragePool, error)
 	RefreshStoragePool(ctx context.Context, id string) (types.StoragePool, error)
 
 	ListNetworks(ctx context.Context) ([]types.Network, error)
@@ -49,6 +50,9 @@ var (
 	// ErrInvalidVMState is returned when an operation is not valid for the
 	// current VM state (e.g. starting an already running VM).
 	ErrInvalidVMState = errInvalidVMState{}
+	// ErrPoolAlreadyExists is returned when creating a storage pool whose name
+	// is taken.
+	ErrPoolAlreadyExists = errors.New("a storage pool with this name already exists")
 	// ErrPoolNotFound is returned when the requested storage pool does not exist.
 	ErrPoolNotFound = errors.New("storage pool was not found")
 	// ErrNetworkNotFound is returned when the requested network does not exist.

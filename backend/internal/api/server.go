@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
@@ -63,6 +64,7 @@ func (s *Server) routes() {
 
 	// Storage pools
 	mux.HandleFunc("GET /api/v1/storage/pools", s.handleListStoragePools)
+	mux.HandleFunc("POST /api/v1/storage/pools", s.handleCreateStoragePool)
 	mux.HandleFunc("GET /api/v1/storage/pools/{id}", s.requireValidVMID(s.handleGetStoragePool))
 	mux.HandleFunc("POST /api/v1/storage/pools/{id}/refresh", s.requireValidVMID(s.handleRefreshStoragePool))
 
@@ -227,6 +229,40 @@ func (s *Server) handleListStoragePools(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, types.StoragePoolList{Items: pools, Total: len(pools)})
+}
+
+// handleCreateStoragePool validates and creates a directory storage pool.
+func (s *Server) handleCreateStoragePool(w http.ResponseWriter, r *http.Request) {
+	var req types.StoragePoolCreate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, r, CodeValidationError, "Invalid JSON body")
+		return
+	}
+	if msg := validateCreateStoragePool(&req); msg != "" {
+		s.writeError(w, r, CodeValidationError, msg)
+		return
+	}
+	pool, err := s.provider.CreateStoragePool(r.Context(), req)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, pool)
+}
+
+var absPathPattern = regexp.MustCompile(`^/[a-zA-Z0-9._/-]{0,254}$`)
+
+func validateCreateStoragePool(req *types.StoragePoolCreate) string {
+	if !vmIDPattern.MatchString(req.Name) {
+		return "Invalid storage pool name"
+	}
+	if !absPathPattern.MatchString(req.TargetPath) || strings.Contains(req.TargetPath, "..") {
+		return "targetPath must be an absolute path without '..'"
+	}
+	if req.Type != nil && *req.Type != "" && *req.Type != types.StoragePoolCreateTypeDir {
+		return "only 'dir' storage pools are supported"
+	}
+	return ""
 }
 
 func (s *Server) handleGetStoragePool(w http.ResponseWriter, r *http.Request) {

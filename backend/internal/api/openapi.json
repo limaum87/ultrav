@@ -210,6 +210,71 @@
             "$ref": "#/components/responses/InternalError"
           }
         }
+      },
+      "post": {
+        "operationId": "createStoragePool",
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Create a storage pool",
+        "description": "Defines, builds and starts a new directory-based storage pool.\nThe target directory is created if it does not exist.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoragePoolCreate"
+              },
+              "example": {
+                "name": "iso-store",
+                "targetPath": "/var/lib/libvirt/isos",
+                "autostart": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pool created (returns the pool)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoragePool"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (name/targetPath)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A pool with this name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "STORAGE_POOL_ALREADY_EXISTS",
+                    "message": "A storage pool with this name already exists",
+                    "requestId": "req_01HV3M9Z2K2Q"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
       }
     },
     "/storage/pools/{id}": {
@@ -1208,6 +1273,40 @@
             "type": "string",
             "nullable": true,
             "example": "/var/lib/libvirt/images"
+          }
+        }
+      },
+      "StoragePoolCreate": {
+        "type": "object",
+        "required": [
+          "name",
+          "targetPath"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "iso-store",
+            "description": "Same rules as resource ids (a-z0-9._-",
+            "max 64)": null
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "dir"
+            ],
+            "default": "dir",
+            "example": "dir",
+            "description": "Only directory pools are supported for now"
+          },
+          "targetPath": {
+            "type": "string",
+            "example": "/var/lib/libvirt/isos",
+            "description": "Absolute host path; created if missing"
+          },
+          "autostart": {
+            "type": "boolean",
+            "default": true,
+            "example": true
           }
         }
       },

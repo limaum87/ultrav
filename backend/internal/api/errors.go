@@ -18,6 +18,7 @@ const (
 	CodeNotFound            = "NOT_FOUND"
 	CodeMethodNotAllowed    = "METHOD_NOT_ALLOWED"
 	CodePoolNotFound        = "STORAGE_POOL_NOT_FOUND"
+	CodePoolAlreadyExists   = "STORAGE_POOL_ALREADY_EXISTS"
 	CodeNetworkNotFound     = "NETWORK_NOT_FOUND"
 	CodeNetworkInvalidState = "NETWORK_INVALID_STATE"
 	CodeIsoNotFound         = "ISO_NOT_FOUND"
@@ -34,6 +35,7 @@ var errorStatus = map[string]int{
 	CodeNotFound:            http.StatusNotFound,
 	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
 	CodePoolNotFound:        http.StatusNotFound,
+	CodePoolAlreadyExists:   http.StatusConflict,
 	CodeNetworkNotFound:     http.StatusNotFound,
 	CodeNetworkInvalidState: http.StatusConflict,
 	CodeIsoNotFound:         http.StatusNotFound,
@@ -68,6 +70,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeVMNotFound, "Virtual machine was not found")
 	case errors.Is(err, hypervisor.ErrPoolNotFound):
 		s.writeError(w, r, CodePoolNotFound, "Storage pool was not found")
+	case errors.Is(err, hypervisor.ErrPoolAlreadyExists):
+		s.writeError(w, r, CodePoolAlreadyExists, "A storage pool with this name already exists")
 	case errors.Is(err, hypervisor.ErrNetworkNotFound):
 		s.writeError(w, r, CodeNetworkNotFound, "Network was not found")
 	case errors.Is(err, hypervisor.ErrInvalidNetworkState):

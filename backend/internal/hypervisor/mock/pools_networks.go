@@ -36,6 +36,36 @@ func (p *Provider) GetStoragePool(_ context.Context, id string) (types.StoragePo
 	return types.StoragePool{}, hypervisor.ErrPoolNotFound
 }
 
+// CreateStoragePool registers a new simulated directory pool.
+func (p *Provider) CreateStoragePool(_ context.Context, req types.StoragePoolCreate) (types.StoragePool, error) {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	for _, pool := range pools {
+		if pool.id == req.Name {
+			return types.StoragePool{}, hypervisor.ErrPoolAlreadyExists
+		}
+	}
+	pools = append(pools, struct {
+		id         string
+		typeName   string
+		active     bool
+		autostart  bool
+		capacity   int64
+		allocation int64
+		targetPath string
+	}{
+		id:         req.Name,
+		typeName:   "dir",
+		active:     true,
+		autostart:  req.Autostart == nil || *req.Autostart,
+		capacity:   500 * 1024 * 1024 * 1024,
+		allocation: 0,
+		targetPath: req.TargetPath,
+	})
+	return poolToModel(pools[len(pools)-1]), nil
+}
+
 // RefreshStoragePool re-syncs usage numbers; in the mock this nudges the
 // allocation of the default pool slightly to feel alive.
 func (p *Provider) RefreshStoragePool(_ context.Context, id string) (types.StoragePool, error) {

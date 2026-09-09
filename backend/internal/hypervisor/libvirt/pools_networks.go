@@ -70,6 +70,45 @@ func (p *Provider) GetStoragePool(_ context.Context, id string) (types.StoragePo
 	return m, err
 }
 
+// CreateStoragePool defines, builds and starts a directory-backed pool.
+func (p *Provider) CreateStoragePool(_ context.Context, req types.StoragePoolCreate) (types.StoragePool, error) {
+	poolType := "dir"
+	if req.Type != nil && *req.Type != "" {
+		poolType = string(*req.Type)
+	}
+	xmlDef := fmt.Sprintf(`<pool type=%q>
+  <name>%s</name>
+  <target>
+    <path>%s</path>
+  </target>
+</pool>`, poolType, xmlEscape(req.Name), xmlEscape(req.TargetPath))
+
+	err := p.withConn(func(c *libvirt.Connect) error {
+		if _, err := c.LookupStoragePoolByName(req.Name); err == nil {
+			return hypervisor.ErrPoolAlreadyExists
+		}
+		pool, err := c.StoragePoolDefineXML(xmlDef, 0)
+		if err != nil {
+			return err
+		}
+		if err := pool.Build(libvirt.STORAGE_POOL_BUILD_NEW); err != nil {
+			_ = pool.Undefine()
+			return err
+		}
+		if err := pool.Create(0); err != nil {
+			_ = pool.Undefine()
+			return err
+		}
+		autostart := req.Autostart == nil || *req.Autostart
+		_ = pool.SetAutostart(autostart) // non-fatal on failure
+		return nil
+	})
+	if err != nil {
+		return types.StoragePool{}, err
+	}
+	return p.GetStoragePool(context.Background(), req.Name)
+}
+
 func (p *Provider) RefreshStoragePool(_ context.Context, id string) (types.StoragePool, error) {
 	err := p.withConn(func(c *libvirt.Connect) error {
 		pool, err := c.LookupStoragePoolByName(id)

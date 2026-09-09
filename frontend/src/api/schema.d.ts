@@ -94,7 +94,12 @@ export interface paths {
         /** List storage pools */
         get: operations["listStoragePools"];
         put?: never;
-        post?: never;
+        /**
+         * Create a storage pool
+         * @description Defines, builds and starts a new directory-based storage pool.
+         *     The target directory is created if it does not exist.
+         */
+        post: operations["createStoragePool"];
         delete?: never;
         options?: never;
         head?: never;
@@ -514,6 +519,30 @@ export interface components {
             /** @example /var/lib/libvirt/images */
             targetPath?: string | null;
         };
+        StoragePoolCreate: {
+            /**
+             * @description Same rules as resource ids (a-z0-9._-
+             * @example iso-store
+             */
+            name: string;
+            /**
+             * @description Only directory pools are supported for now
+             * @default dir
+             * @example dir
+             * @enum {string}
+             */
+            type: "dir";
+            /**
+             * @description Absolute host path; created if missing
+             * @example /var/lib/libvirt/isos
+             */
+            targetPath: string;
+            /**
+             * @default true
+             * @example true
+             */
+            autostart: boolean;
+        };
         StoragePoolList: {
             items: components["schemas"]["StoragePool"][];
             /** @example 2 */
@@ -920,6 +949,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoragePoolList"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createStoragePool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "iso-store",
+                 *       "targetPath": "/var/lib/libvirt/isos",
+                 *       "autostart": true
+                 *     }
+                 */
+                "application/json": components["schemas"]["StoragePoolCreate"];
+            };
+        };
+        responses: {
+            /** @description Pool created (returns the pool) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePool"];
+                };
+            };
+            /** @description Validation error (name/targetPath) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A pool with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "STORAGE_POOL_ALREADY_EXISTS",
+                     *         "message": "A storage pool with this name already exists",
+                     *         "requestId": "req_01HV3M9Z2K2Q"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             500: components["responses"]["InternalError"];

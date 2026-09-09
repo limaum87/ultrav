@@ -77,6 +77,11 @@ const (
 	StoragePoolTypeZfs   StoragePoolType = "zfs"
 )
 
+// Defines values for StoragePoolCreateType.
+const (
+	StoragePoolCreateTypeDir StoragePoolCreateType = "dir"
+)
+
 // Defines values for VMState.
 const (
 	VMStateError        VMState = "error"
@@ -263,6 +268,23 @@ type StoragePoolState string
 // StoragePoolType defines model for StoragePool.Type.
 type StoragePoolType string
 
+// StoragePoolCreate defines model for StoragePoolCreate.
+type StoragePoolCreate struct {
+	Autostart *bool `json:"autostart,omitempty"`
+
+	// Name Same rules as resource ids (a-z0-9._-
+	Name string `json:"name"`
+
+	// TargetPath Absolute host path; created if missing
+	TargetPath string `json:"targetPath"`
+
+	// Type Only directory pools are supported for now
+	Type *StoragePoolCreateType `json:"type,omitempty"`
+}
+
+// StoragePoolCreateType Only directory pools are supported for now
+type StoragePoolCreateType string
+
 // StoragePoolList defines model for StoragePoolList.
 type StoragePoolList struct {
 	Items []StoragePool `json:"items"`
@@ -338,6 +360,9 @@ type UploadIsoMultipartBody struct {
 
 // UploadIsoMultipartRequestBody defines body for UploadIso for multipart/form-data ContentType.
 type UploadIsoMultipartRequestBody UploadIsoMultipartBody
+
+// CreateStoragePoolJSONRequestBody defines body for CreateStoragePool for application/json ContentType.
+type CreateStoragePoolJSONRequestBody = StoragePoolCreate
 
 // CreateVirtualMachineJSONRequestBody defines body for CreateVirtualMachine for application/json ContentType.
 type CreateVirtualMachineJSONRequestBody = VirtualMachineCreate
