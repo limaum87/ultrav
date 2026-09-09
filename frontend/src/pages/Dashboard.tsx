@@ -1,9 +1,11 @@
+import { Link, useNavigate } from 'react-router-dom';
 import { api, unwrap, type Host, type VirtualMachine } from '../api/client';
 import { formatBytes, formatUptime, usePolling } from '../lib/hooks';
 import { EmptyState, MetricCard, StateBadge, TableSkeleton } from '../components/ui';
 import { Cpu, MemoryStick, HardDrive, Monitor } from 'lucide-react';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { data, error, loading } = usePolling(async () => {
     const host = await unwrap(api.GET('/host'));
     const vms = await unwrap(api.GET('/vms'));
@@ -99,11 +101,17 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {vms.items.map((vm) => (
-                <tr key={vm.id}>
+                <tr
+                  key={vm.id}
+                  className="row-clickable"
+                  tabIndex={0}
+                  onClick={() => navigate(`/vms/${vm.id}`)}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/vms/${vm.id}`)}
+                >
                   <td>
-                    <a className="vm-link" href={`/vms/${vm.id}`}>
+                    <Link className="vm-link" to={`/vms/${vm.id}`}>
                       {vm.name}
-                    </a>
+                    </Link>
                   </td>
                   <td><StateBadge state={vm.state} /></td>
                   <td>{vm.vcpus}</td>
