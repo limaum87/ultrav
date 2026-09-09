@@ -3,6 +3,7 @@ package mock
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
@@ -157,6 +158,72 @@ func (p *Provider) StopNetwork(_ context.Context, id string) (types.Network, err
 	return networkToModel(*n), nil
 }
 
+// CreateNetwork registers a new simulated network.
+func (p *Provider) CreateNetwork(_ context.Context, req types.NetworkCreate) (types.Network, error) {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	for _, n := range networks {
+		if n.id == req.Name {
+			return types.Network{}, hypervisor.ErrNetworkAlreadyExists
+		}
+	}
+
+	mode := string(req.Mode)
+	dhcp := req.DhcpEnabled == nil || *req.DhcpEnabled
+	bridge, ip, prefix := "", "", 0
+	switch req.Mode {
+	case types.NetworkCreateModeBridge:
+		if req.BridgeName == nil || *req.BridgeName == "" {
+			return types.Network{}, fmt.Errorf("%w: bridgeName is required for bridge networks", hypervisor.ErrInvalidNetworkState)
+		}
+		bridge = *req.BridgeName
+		dhcp = false
+	default:
+		if req.Cidr == nil || *req.Cidr == "" {
+			return types.Network{}, fmt.Errorf("%w: cidr is required for nat/isolated networks", hypervisor.ErrInvalidNetworkState)
+		}
+		_, ipNet, err := net.ParseCIDR(*req.Cidr)
+		if err != nil {
+			return types.Network{}, fmt.Errorf("%w: invalid cidr: %v", hypervisor.ErrInvalidNetworkState, err)
+		}
+		gw := make(net.IP, len(ipNet.IP.To4()))
+		copy(gw, ipNet.IP.To4())
+		gw[len(gw)-1]++
+		ip = gw.String()
+		prefix, _ = ipNet.Mask.Size()
+	}
+
+	networks = append(networks, struct {
+		id        string
+		active    bool
+		autostart bool
+		bridge    string
+		ip        string
+		prefix    int
+		dhcp      bool
+		domain    string
+		mode      string
+	}{
+		id:        req.Name,
+		active:    true,
+		autostart: req.Autostart == nil || *req.Autostart,
+		bridge:    bridge,
+		ip:        ip,
+		prefix:    prefix,
+		dhcp:      dhcp,
+		domain:    req.Name,
+		mode:      mode,
+	})
+	return networkToModel(networks[len(networks)-1]), nil
+}
+
+// ListHostBridges returns an empty list: the mock host (kvm01) has no host
+// bridges configured, which exercises the UI's "no bridges found" guidance.
+func (p *Provider) ListHostBridges(_ context.Context) ([]types.HostBridge, error) {
+	return []types.HostBridge{}, nil
+}
+
 // networkLocked looks a network up; callers must hold poolMu.
 func (p *Provider) networkLocked(id string) (*struct {
 	id        string
@@ -167,6 +234,7 @@ func (p *Provider) networkLocked(id string) (*struct {
 	prefix    int
 	dhcp      bool
 	domain    string
+	mode      string
 }, error) {
 	for i := range networks {
 		if networks[i].id == id {
@@ -185,11 +253,13 @@ func networkToModel(src struct {
 	prefix    int
 	dhcp      bool
 	domain    string
+	mode      string
 }) types.Network {
 	state := types.NetworkStateInactive
 	if src.active {
 		state = types.NetworkStateActive
 	}
+	mode := types.NetworkMode(src.mode)
 	return types.Network{
 		Id:          src.id,
 		Name:        src.id,
@@ -200,5 +270,6 @@ func networkToModel(src struct {
 		IpPrefix:    &src.prefix,
 		DhcpEnabled: src.dhcp,
 		DomainName:  &src.domain,
+		Mode:        &mode,
 	}
 }

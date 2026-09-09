@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"net"
+	"regexp"
+	"sort"
 
 	libvirt "libvirt.org/go/libvirt"
 
@@ -24,9 +27,12 @@ type networkXML struct {
 	Bridge struct {
 		Name string `xml:"name,attr"`
 	} `xml:"bridge"`
+	Forward struct {
+		Mode string `xml:"mode,attr"`
+	} `xml:"forward"`
 	IP struct {
-		Address string `xml:"address,attr"`
-		Prefix  int    `xml:"prefix,attr"`
+		Address string    `xml:"address,attr"`
+		Prefix  int       `xml:"prefix,attr"`
 		DHCP    *struct{} `xml:"dhcp"`
 		Domain  struct {
 			Name string `xml:"name,attr"`
@@ -293,12 +299,14 @@ func networkToModel(net *libvirt.Network) (types.Network, error) {
 	}
 
 	dhcpPresent := nx.IP.DHCP != nil
+	mode := networkForwardMode(nx.Forward.Mode)
 	m := types.Network{
 		Id:          name,
 		Name:        name,
 		State:       state,
 		Autostart:   autostart,
 		DhcpEnabled: dhcpPresent,
+		Mode:        &mode,
 	}
 	if nx.Bridge.Name != "" {
 		m.Bridge = &nx.Bridge.Name
@@ -322,4 +330,182 @@ func sortNetworks(nets []types.Network) {
 			nets[j], nets[j-1] = nets[j-1], nets[j]
 		}
 	}
+}
+
+// networkForwardMode maps a libvirt forward mode to our contract enum. An
+// empty forward element means an isolated network.
+func networkForwardMode(mode string) types.NetworkMode {
+	switch mode {
+	case "nat", "bridge":
+		return types.NetworkMode(mode)
+	case "route", "open", "vepa", "passthrough", "hostdev":
+		// other forwarding modes exist; report them as their closest cousin
+		return types.NetworkModeNat
+	}
+	return types.NetworkModeIsolated
+}
+
+// CreateNetwork defines and starts a virtual network.
+func (p *Provider) CreateNetwork(_ context.Context, req types.NetworkCreate) (types.Network, error) {
+	xmlDef, err := networkCreateXML(req)
+	if err != nil {
+		return types.Network{}, err
+	}
+	err = p.withConn(func(c *libvirt.Connect) error {
+		if _, err := c.LookupNetworkByName(req.Name); err == nil {
+			return hypervisor.ErrNetworkAlreadyExists
+		}
+		net, err := c.NetworkDefineXML(xmlDef)
+		if err != nil {
+			return err
+		}
+		if err := net.Create(); err != nil {
+			_ = net.Undefine()
+			return err
+		}
+		autostart := req.Autostart == nil || *req.Autostart
+		_ = net.SetAutostart(autostart) // non-fatal on failure
+		return nil
+	})
+	if err != nil {
+		return types.Network{}, err
+	}
+	return p.GetNetwork(context.Background(), req.Name)
+}
+
+// cidrPattern accepts dotted-quad/prefix subnets (e.g. 192.168.100.0/24).
+var cidrPattern = regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$`)
+
+// ifaceNamePattern is an allowlist for interface names (host bridges).
+var ifaceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,15}$`)
+
+// networkCreateXML builds the libvirt network XML for the three supported
+// modes. Validation errors are surfaced as ErrInvalidNetworkState so the API
+// layer maps them to a client-facing 4xx.
+func networkCreateXML(req types.NetworkCreate) (string, error) {
+	switch req.Mode {
+	case types.NetworkCreateModeBridge:
+		if req.BridgeName == nil || !ifaceNamePattern.MatchString(*req.BridgeName) {
+			return "", fmt.Errorf("%w: bridgeName is required (and must be a valid interface name) for bridge networks", hypervisor.ErrInvalidNetworkState)
+		}
+		return fmt.Sprintf(`<network>
+  <name>%s</name>
+  <forward mode="bridge"/>
+  <bridge name="%s"/>
+</network>`, xmlEscape(req.Name), xmlEscape(*req.BridgeName)), nil
+
+	case types.NetworkCreateModeNat, types.NetworkCreateModeIsolated:
+		if req.Cidr == nil || !cidrPattern.MatchString(*req.Cidr) {
+			return "", fmt.Errorf("%w: cidr is required (e.g. 192.168.100.0/24) for nat/isolated networks", hypervisor.ErrInvalidNetworkState)
+		}
+		_, ipNet, err := net.ParseCIDR(*req.Cidr)
+		if err != nil {
+			return "", fmt.Errorf("%w: invalid cidr: %v", hypervisor.ErrInvalidNetworkState, err)
+		}
+		gw, last := subnetFirstAndLastHost(ipNet)
+		if gw == nil {
+			return "", fmt.Errorf("%w: cidr must be an IPv4 subnet of at least /30", hypervisor.ErrInvalidNetworkState)
+		}
+		prefix, _ := ipNet.Mask.Size()
+
+		dhcp := ""
+		if req.DhcpEnabled == nil || *req.DhcpEnabled {
+			dhcp = fmt.Sprintf(`
+    <dhcp>
+      <range start="%s" end="%s"/>
+    </dhcp>`, gw.String(), last.String())
+		}
+
+		forward := ""
+		if req.Mode == types.NetworkCreateModeNat {
+			forward = `<forward mode="nat"/>`
+		}
+		return fmt.Sprintf(`<network>
+  <name>%s</name>
+  %s
+  <domain name="%s"/>
+  <ip address="%s" prefix="%d">%s
+  </ip>
+</network>`, xmlEscape(req.Name), forward, xmlEscape(req.Name), gw.String(), prefix, dhcp), nil
+	}
+	return "", fmt.Errorf("%w: unsupported network mode %q", hypervisor.ErrInvalidNetworkState, req.Mode)
+}
+
+// subnetFirstAndLastHost returns the first usable host address (used as the
+// network gateway) and the last usable host address of the subnet.
+func subnetFirstAndLastHost(ipNet *net.IPNet) (first, last net.IP) {
+	network := ipNet.IP.To4()
+	if network == nil {
+		return nil, nil
+	}
+	size := len(network)
+	first = make(net.IP, size)
+	last = make(net.IP, size)
+	for i := range network {
+		first[i] = network[i]&ipNet.Mask[i] | 1 // network+1 (gateway)
+		last[i] = network[i]&ipNet.Mask[i] | ^ipNet.Mask[i]
+	}
+	// last host = broadcast-1
+	last = addToIP(last, -1)
+	return first, last
+}
+
+func addToIP(ip net.IP, delta int32) net.IP {
+	out := make(net.IP, len(ip))
+	copy(out, ip)
+	carry := delta
+	for i := len(out) - 1; i >= 0 && carry != 0; i-- {
+		v := int32(out[i]) + carry
+		out[i] = byte(v)
+		carry = v >> 8
+	}
+	return out
+}
+
+// hostInterfaceXML is the subset of host interface XML we consume.
+type hostInterfaceXML struct {
+	Type string `xml:"type,attr"`
+}
+
+// ListHostBridges returns the Linux bridges configured on the host. Bridges
+// are host configuration (netplan/NetworkManager); UltraV only detects them.
+func (p *Provider) ListHostBridges(_ context.Context) ([]types.HostBridge, error) {
+	var out []types.HostBridge
+	err := p.withConn(func(c *libvirt.Connect) error {
+		active, err := c.ListInterfaces()
+		if err != nil {
+			return err
+		}
+		defined, err := c.ListDefinedInterfaces()
+		if err != nil {
+			return err
+		}
+		activeSet := make(map[string]bool, len(active))
+		for _, n := range active {
+			activeSet[n] = true
+		}
+		all := append(append([]string{}, active...), defined...)
+		seen := make(map[string]bool, len(all))
+		for _, name := range all {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			iface, err := c.LookupInterfaceByName(name)
+			if err != nil {
+				continue
+			}
+			var ix hostInterfaceXML
+			xmlStr, err := iface.GetXMLDesc(0)
+			if err != nil || xml.Unmarshal([]byte(xmlStr), &ix) != nil {
+				continue
+			}
+			if ix.Type == "bridge" {
+				out = append(out, types.HostBridge{Name: name, Active: activeSet[name]})
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+		return nil
+	})
+	return out, err
 }

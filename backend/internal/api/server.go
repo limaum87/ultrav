@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -75,9 +76,11 @@ func (s *Server) routes() {
 
 	// Networks
 	mux.HandleFunc("GET /api/v1/networks", s.handleListNetworks)
+	mux.HandleFunc("POST /api/v1/networks", s.handleCreateNetwork)
 	mux.HandleFunc("GET /api/v1/networks/{id}", s.requireValidVMID(s.handleGetNetwork))
 	mux.HandleFunc("POST /api/v1/networks/{id}/start", s.requireValidVMID(s.handleStartNetwork))
 	mux.HandleFunc("POST /api/v1/networks/{id}/stop", s.requireValidVMID(s.handleStopNetwork))
+	mux.HandleFunc("GET /api/v1/host/bridges", s.handleListHostBridges)
 
 	// Contract & docs
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
@@ -215,10 +218,18 @@ func (s *Server) requireValidVMID(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) handleStartVM(w http.ResponseWriter, r *http.Request)     { s.vmAction(s.provider.StartVirtualMachine)(w, r) }
-func (s *Server) handleShutdownVM(w http.ResponseWriter, r *http.Request)  { s.vmAction(s.provider.ShutdownVirtualMachine)(w, r) }
-func (s *Server) handleRebootVM(w http.ResponseWriter, r *http.Request)    { s.vmAction(s.provider.RebootVirtualMachine)(w, r) }
-func (s *Server) handleForceStopVM(w http.ResponseWriter, r *http.Request) { s.vmAction(s.provider.ForceStopVirtualMachine)(w, r) }
+func (s *Server) handleStartVM(w http.ResponseWriter, r *http.Request) {
+	s.vmAction(s.provider.StartVirtualMachine)(w, r)
+}
+func (s *Server) handleShutdownVM(w http.ResponseWriter, r *http.Request) {
+	s.vmAction(s.provider.ShutdownVirtualMachine)(w, r)
+}
+func (s *Server) handleRebootVM(w http.ResponseWriter, r *http.Request) {
+	s.vmAction(s.provider.RebootVirtualMachine)(w, r)
+}
+func (s *Server) handleForceStopVM(w http.ResponseWriter, r *http.Request) {
+	s.vmAction(s.provider.ForceStopVirtualMachine)(w, r)
+}
 
 // --- storage pools ---
 
@@ -348,6 +359,61 @@ func (s *Server) handleListNetworks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, types.NetworkList{Items: nets, Total: len(nets)})
+}
+
+// handleCreateNetwork validates and creates a virtual network (nat, bridge
+// or isolated).
+func (s *Server) handleCreateNetwork(w http.ResponseWriter, r *http.Request) {
+	var req types.NetworkCreate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, r, CodeValidationError, "Invalid JSON body")
+		return
+	}
+	if msg := validateCreateNetwork(&req); msg != "" {
+		s.writeError(w, r, CodeValidationError, msg)
+		return
+	}
+	netw, err := s.provider.CreateNetwork(r.Context(), req)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, netw)
+}
+
+var cidrPattern = regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$`)
+
+func validateCreateNetwork(req *types.NetworkCreate) string {
+	if !vmIDPattern.MatchString(req.Name) {
+		return "Invalid network name"
+	}
+	switch req.Mode {
+	case types.NetworkCreateModeNat, types.NetworkCreateModeIsolated:
+		if req.Cidr == nil || !cidrPattern.MatchString(*req.Cidr) {
+			return "cidr is required for nat/isolated networks (e.g. 192.168.100.0/24)"
+		}
+		if _, _, err := net.ParseCIDR(*req.Cidr); err != nil {
+			return "cidr is not a valid subnet"
+		}
+	case types.NetworkCreateModeBridge:
+		if req.BridgeName == nil || !vmIDPattern.MatchString(*req.BridgeName) {
+			return "bridgeName is required for bridge networks and must be a valid interface name"
+		}
+	default:
+		return "mode must be one of: nat, bridge, isolated"
+	}
+	return ""
+}
+
+// handleListHostBridges lists host Linux bridges available for bridge-mode
+// networks (host config; UltraV only detects them).
+func (s *Server) handleListHostBridges(w http.ResponseWriter, r *http.Request) {
+	bridges, err := s.provider.ListHostBridges(r.Context())
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, types.HostBridgeList{Items: bridges, Total: len(bridges)})
 }
 
 func (s *Server) handleGetNetwork(w http.ResponseWriter, r *http.Request) {

@@ -38,8 +38,15 @@ type Provider interface {
 
 	ListNetworks(ctx context.Context) ([]types.Network, error)
 	GetNetwork(ctx context.Context, id string) (types.Network, error)
+	// CreateNetwork defines and starts a virtual network (NAT, bridge to a
+	// host bridge, or isolated). Returns ErrNetworkAlreadyExists if the name
+	// is taken.
+	CreateNetwork(ctx context.Context, req types.NetworkCreate) (types.Network, error)
 	StartNetwork(ctx context.Context, id string) (types.Network, error)
 	StopNetwork(ctx context.Context, id string) (types.Network, error)
+	// ListHostBridges returns Linux bridges configured on the host (e.g. br0),
+	// which bridge-mode virtual networks attach to.
+	ListHostBridges(ctx context.Context) ([]types.HostBridge, error)
 }
 
 var (
@@ -57,6 +64,9 @@ var (
 	ErrPoolNotFound = errors.New("storage pool was not found")
 	// ErrNetworkNotFound is returned when the requested network does not exist.
 	ErrNetworkNotFound = errors.New("network was not found")
+	// ErrNetworkAlreadyExists is returned when creating a network whose name
+	// is taken.
+	ErrNetworkAlreadyExists = errors.New("a network with this name already exists")
 	// ErrIsoNotFound is returned when the referenced ISO image does not exist.
 	ErrIsoNotFound = errors.New("ISO image was not found")
 	// ErrInvalidNetworkState is returned when a network operation is not valid
@@ -70,4 +80,6 @@ func (errVMNotFound) Error() string { return "virtual machine was not found" }
 
 type errInvalidVMState struct{}
 
-func (errInvalidVMState) Error() string { return "operation is not valid for the current virtual machine state" }
+func (errInvalidVMState) Error() string {
+	return "operation is not valid for the current virtual machine state"
+}

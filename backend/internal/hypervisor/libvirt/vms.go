@@ -27,9 +27,9 @@ type domainXML struct {
 		Value int64  `xml:"chardata"`
 		Unit  string `xml:"unit,attr"`
 	} `xml:"currentMemory"`
-	VCPU int            `xml:"vcpu"`
-	Disks []domainDisk  `xml:"devices>disk"`
-	NICs  []domainNIC   `xml:"devices>interface"`
+	VCPU  int          `xml:"vcpu"`
+	Disks []domainDisk `xml:"devices>disk"`
+	NICs  []domainNIC  `xml:"devices>interface"`
 }
 
 type domainDisk struct {
@@ -77,7 +77,7 @@ func (p *Provider) ListVirtualMachines(_ context.Context) ([]types.VirtualMachin
 	var out []types.VirtualMachine
 	err := p.withConn(func(c *libvirt.Connect) error {
 		doms, err := c.ListAllDomains(
-			libvirt.CONNECT_LIST_DOMAINS_ACTIVE|libvirt.CONNECT_LIST_DOMAINS_INACTIVE)
+			libvirt.CONNECT_LIST_DOMAINS_ACTIVE | libvirt.CONNECT_LIST_DOMAINS_INACTIVE)
 		if err != nil {
 			return err
 		}

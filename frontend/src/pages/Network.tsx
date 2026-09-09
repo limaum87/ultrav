@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
 import { api, unwrap, ApiError, type Network } from '../api/client';
 import { usePolling } from '../lib/hooks';
+import { CreateNetworkModal } from '../components/CreateNetworkModal';
 
 export default function NetworkPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const { data, error, loading, refresh } = usePolling(async () =>
     unwrap(api.GET('/networks')),
   );
@@ -35,15 +37,25 @@ export default function NetworkPage() {
           <h1>Network</h1>
           <p className="subtitle">{data.total} virtual networks on this host</p>
         </div>
+        <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
+          Add Network
+        </button>
       </header>
 
       {actionError && <div className="alert error">{actionError}</div>}
+
+      <CreateNetworkModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={() => void refresh()}
+      />
 
       <div className="card table-card">
         <table className="table">
           <thead>
             <tr>
               <th>Name</th>
+              <th>Mode</th>
               <th>Status</th>
               <th>Bridge</th>
               <th>Gateway</th>
@@ -60,6 +72,9 @@ export default function NetworkPage() {
                   {net.domainName && <div className="net-domain">{net.domainName}</div>}
                 </td>
                 <td>
+                  <span className={`mode-badge mode-${net.mode ?? 'nat'}`}>{net.mode ?? 'nat'}</span>
+                </td>
+                <td>
                   <span className={`state state-${net.state === 'active' ? 'running' : ''}`}>
                     <span className="state-dot" />
                     {net.state}
@@ -67,7 +82,7 @@ export default function NetworkPage() {
                 </td>
                 <td className="mono">{net.bridge ?? '—'}</td>
                 <td className="mono">
-                  {net.ipAddress ? `${net.ipAddress}/${net.ipPrefix ?? ''}` : '—'}
+                  {net.ipAddress ? `${net.ipAddress}/${net.ipPrefix ?? ''}` : net.mode === 'bridge' ? 'from LAN DHCP' : '—'}
                 </td>
                 <td>{net.dhcpEnabled ? 'yes' : 'no'}</td>
                 <td>{net.autostart ? 'yes' : 'no'}</td>

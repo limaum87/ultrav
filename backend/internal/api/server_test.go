@@ -3,8 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"net/http"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -382,5 +382,83 @@ func TestCreateStoragePool(t *testing.T) {
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Result().StatusCode != 400 {
 		t.Errorf("invalid path: expected 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestCreateNetwork(t *testing.T) {
+	s := testServer(t)
+
+	// NAT network
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"lab","mode":"nat","cidr":"192.168.50.0/24","dhcpEnabled":true}`))
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res := rec.Result()
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	if res.StatusCode != 201 || body["id"] != "lab" || body["state"] != "active" || body["mode"] != "nat" {
+		t.Errorf("create nat: %d %v", res.StatusCode, body)
+	}
+	if gw, _ := body["ipAddress"].(string); gw != "192.168.50.1" {
+		t.Errorf("gateway: got %v", body["ipAddress"])
+	}
+
+	// bridge network
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"lan","mode":"bridge","bridgeName":"br0"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res = rec.Result()
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	if res.StatusCode != 201 || body["mode"] != "bridge" || body["dhcpEnabled"] != false {
+		t.Errorf("create bridge: %d %v", res.StatusCode, body)
+	}
+	if br, _ := body["bridge"].(string); br != "br0" {
+		t.Errorf("bridge name: got %v", body["bridge"])
+	}
+
+	// duplicate -> 409
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"lab","mode":"nat","cidr":"192.168.51.0/24"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 409 {
+		t.Errorf("duplicate: expected 409, got %d", rec.Result().StatusCode)
+	}
+
+	// bridge without bridgeName -> 400
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"bad","mode":"bridge"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 400 {
+		t.Errorf("missing bridgeName: expected 400, got %d", rec.Result().StatusCode)
+	}
+
+	// nat without cidr -> 400
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"bad2","mode":"nat"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 400 {
+		t.Errorf("missing cidr: expected 400, got %d", rec.Result().StatusCode)
+	}
+
+	// invalid mode -> 400
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"bad3","mode":"macvtap"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 400 {
+		t.Errorf("invalid mode: expected 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestListHostBridges(t *testing.T) {
+	s := testServer(t)
+
+	res, body := get(t, s, "/api/v1/host/bridges")
+	if res.StatusCode != 200 || body["total"] != float64(0) {
+		t.Errorf("bridges: %d %v", res.StatusCode, body)
 	}
 }

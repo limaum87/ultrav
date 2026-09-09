@@ -180,7 +180,7 @@ Marque somente se **todos** passarem:
 
 - [ ] `GET /api/v1/health` → 200 `{"status":"ok"}`
 - [ ] `GET /api/v1/ready` → 200 com `hypervisor: ready`
-- [ ] `GET /openapi.json` → 200 e `GET /docs` → 200 (Swagger mostra 17 endpoints)
+- [ ] `GET /openapi.json` → 200 e `GET /docs` → 200 (Swagger mostra 24 endpoints)
 - [ ] UI em `http://<host>:8275` carrega Dashboard, Virtual Machines, Storage, Network
 - [ ] No modo real: host mostrado é o hostname real; pools/networks reais aparecem
 - [ ] Pelo menos uma power action executada com sucesso via API (e o estado reflete no `virsh list`)

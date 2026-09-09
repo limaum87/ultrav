@@ -33,10 +33,24 @@ const (
 	Ok HealthStatus = "ok"
 )
 
+// Defines values for NetworkMode.
+const (
+	NetworkModeBridge   NetworkMode = "bridge"
+	NetworkModeIsolated NetworkMode = "isolated"
+	NetworkModeNat      NetworkMode = "nat"
+)
+
 // Defines values for NetworkState.
 const (
 	NetworkStateActive   NetworkState = "active"
 	NetworkStateInactive NetworkState = "inactive"
+)
+
+// Defines values for NetworkCreateMode.
+const (
+	NetworkCreateModeBridge   NetworkCreateMode = "bridge"
+	NetworkCreateModeIsolated NetworkCreateMode = "isolated"
+	NetworkCreateModeNat      NetworkCreateMode = "nat"
 )
 
 // Defines values for NetworkInterfaceModel.
@@ -184,6 +198,18 @@ type Host struct {
 	Virtualization    *HostVirtualization `json:"virtualization,omitempty"`
 }
 
+// HostBridge defines model for HostBridge.
+type HostBridge struct {
+	Active bool   `json:"active"`
+	Name   string `json:"name"`
+}
+
+// HostBridgeList defines model for HostBridgeList.
+type HostBridgeList struct {
+	Items []HostBridge `json:"items"`
+	Total int          `json:"total"`
+}
+
 // HostVirtualization defines model for HostVirtualization.
 type HostVirtualization struct {
 	KvmEnabled *bool `json:"kvmEnabled,omitempty"`
@@ -212,12 +238,33 @@ type Network struct {
 	Id          string       `json:"id"`
 	IpAddress   *string      `json:"ipAddress"`
 	IpPrefix    *int         `json:"ipPrefix"`
+	Mode        *NetworkMode `json:"mode,omitempty"`
 	Name        string       `json:"name"`
 	State       NetworkState `json:"state"`
 }
 
+// NetworkMode defines model for Network.Mode.
+type NetworkMode string
+
 // NetworkState defines model for Network.State.
 type NetworkState string
+
+// NetworkCreate defines model for NetworkCreate.
+type NetworkCreate struct {
+	Autostart *bool `json:"autostart"`
+
+	// BridgeName Host bridge to attach to (required when mode is bridge).
+	BridgeName *string `json:"bridgeName"`
+
+	// Cidr Subnet for nat/isolated modes (required for those modes).
+	Cidr        *string           `json:"cidr"`
+	DhcpEnabled *bool             `json:"dhcpEnabled"`
+	Mode        NetworkCreateMode `json:"mode"`
+	Name        string            `json:"name"`
+}
+
+// NetworkCreateMode defines model for NetworkCreate.Mode.
+type NetworkCreateMode string
 
 // NetworkInterface defines model for NetworkInterface.
 type NetworkInterface struct {
@@ -357,6 +404,9 @@ type VMNotFound = Error
 type UploadIsoMultipartBody struct {
 	File openapi_types.File `json:"file"`
 }
+
+// CreateNetworkJSONRequestBody defines body for CreateNetwork for application/json ContentType.
+type CreateNetworkJSONRequestBody = NetworkCreate
 
 // UploadIsoMultipartRequestBody defines body for UploadIso for multipart/form-data ContentType.
 type UploadIsoMultipartRequestBody UploadIsoMultipartBody

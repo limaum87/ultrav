@@ -199,6 +199,38 @@ export interface paths {
         /** List virtual networks */
         get: operations["listNetworks"];
         put?: never;
+        /**
+         * Create a virtual network
+         * @description Creates a virtual network in one of three modes:
+         *     - `nat`: routed + NAT subnet managed by libvirt (DHCP + dnsmasq)
+         *     - `bridge`: passthrough to an existing host bridge (VMs get IPs on the
+         *       host's LAN; requires a bridge such as br0 configured on the host --
+         *       libvirt cannot create host bridges)
+         *     - `isolated`: internal-only subnet, no outside connectivity
+         */
+        post: operations["createNetwork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/host/bridges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List host bridge interfaces
+         * @description Host Linux bridges (e.g. br0) that virtual networks in `bridge` mode can
+         *     attach to. Creating these bridges is host configuration (netplan /
+         *     NetworkManager), not something libvirt or UltraV does; use this list to
+         *     detect what exists and guide the user when nothing is available.
+         */
+        get: operations["listHostBridges"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -478,6 +510,45 @@ export interface components {
             dhcpEnabled: boolean;
             /** @example default */
             domainName?: string | null;
+            /**
+             * @example nat
+             * @enum {string}
+             */
+            mode?: "nat" | "bridge" | "isolated";
+        };
+        NetworkCreate: {
+            /** @example lan */
+            name: string;
+            /**
+             * @example nat
+             * @enum {string}
+             */
+            mode: "nat" | "bridge" | "isolated";
+            /**
+             * @description Host bridge to attach to (required when mode is bridge).
+             * @example br0
+             */
+            bridgeName?: string | null;
+            /**
+             * @description Subnet for nat/isolated modes (required for those modes).
+             * @example 192.168.100.0/24
+             */
+            cidr?: string | null;
+            /** @example true */
+            dhcpEnabled?: boolean | null;
+            /** @example true */
+            autostart?: boolean | null;
+        };
+        HostBridge: {
+            /** @example br0 */
+            name: string;
+            /** @example true */
+            active: boolean;
+        };
+        HostBridgeList: {
+            items: components["schemas"]["HostBridge"][];
+            /** @example 1 */
+            total: number;
         };
         NetworkList: {
             items: components["schemas"]["Network"][];
@@ -1193,6 +1264,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NetworkList"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createNetwork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkCreate"];
+            };
+        };
+        responses: {
+            /** @description Network created (and started) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Network"];
+                };
+            };
+            /** @description Invalid input (missing bridgeName for bridge mode, bad CIDR, ...) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A network with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listHostBridges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Host bridges (may be empty) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostBridgeList"];
                 };
             };
             500: components["responses"]["InternalError"];

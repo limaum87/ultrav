@@ -3,13 +3,13 @@ package mock
 // Storage pools and virtual networks simulated by the mock provider.
 
 var pools = []struct {
-	id          string
-	typeName    string
-	active      bool
-	autostart   bool
-	capacity    int64
-	allocation  int64
-	targetPath  string
+	id         string
+	typeName   string
+	active     bool
+	autostart  bool
+	capacity   int64
+	allocation int64
+	targetPath string
 }{
 	{id: "default", typeName: "dir", active: true, autostart: true,
 		capacity: 2 * 1024 * 1024 * 1024 * 1024, allocation: 720 * 1024 * 1024 * 1024,
@@ -28,7 +28,8 @@ var networks = []struct {
 	prefix    int
 	dhcp      bool
 	domain    string
+	mode      string
 }{
-	{id: "default", active: true, autostart: true, bridge: "virbr0", ip: "10.0.0.1", prefix: 24, dhcp: true, domain: "lan.ultrav.internal"},
-	{id: "mgmt", active: false, autostart: false, bridge: "virbr1", ip: "10.99.0.1", prefix: 24, dhcp: false, domain: "mgmt.ultrav.internal"},
+	{id: "default", active: true, autostart: true, bridge: "virbr0", ip: "10.0.0.1", prefix: 24, dhcp: true, domain: "lan.ultrav.internal", mode: "nat"},
+	{id: "mgmt", active: false, autostart: false, bridge: "virbr1", ip: "10.99.0.1", prefix: 24, dhcp: false, domain: "mgmt.ultrav.internal", mode: "isolated"},
 }

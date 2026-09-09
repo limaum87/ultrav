@@ -44,13 +44,13 @@ const (
 
 // vmSpec is the static definition of a simulated VM.
 type vmSpec struct {
-	id      string
-	vcpus   int
-	memory  int64
-	os      string
-	diskGB  int
-	ip      string // assigned while running
-	mac     string
+	id     string
+	vcpus  int
+	memory int64
+	os     string
+	diskGB int
+	ip     string // assigned while running
+	mac    string
 }
 
 var specs = []vmSpec{
@@ -85,14 +85,14 @@ type Provider struct {
 func New() *Provider {
 	now := time.Now()
 	p := &Provider{
-		vms: make(map[string]*vmState, len(specs)),
-		rng: rand.New(rand.NewSource(now.UnixNano())),
+		vms:   make(map[string]*vmState, len(specs)),
+		rng:   rand.New(rand.NewSource(now.UnixNano())),
 		start: now,
 	}
 	boots := map[string]time.Duration{
-		"erp01":       96 * time.Hour,
-		"web01":       240 * time.Hour,
-		"database01":  720 * time.Hour,
+		"erp01":        96 * time.Hour,
+		"web01":        240 * time.Hour,
+		"database01":   720 * time.Hour,
 		"monitoring01": 0,
 	}
 	for _, s := range specs {
@@ -344,13 +344,13 @@ func (p *Provider) storageUsedLocked() *int64 {
 
 func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 	m := types.VirtualMachine{
-		Id:      vm.spec.id,
-		Name:    vm.spec.id,
-		State:   vm.state,
-		Vcpus:   vm.spec.vcpus,
+		Id:          vm.spec.id,
+		Name:        vm.spec.id,
+		State:       vm.state,
+		Vcpus:       vm.spec.vcpus,
 		MemoryBytes: vm.spec.memory,
-		Os:      &vm.spec.os,
-		Disks:   vm.disks,
+		Os:          &vm.spec.os,
+		Disks:       vm.disks,
 	}
 	if vm.disks == nil {
 		m.Disks = []types.Disk{{

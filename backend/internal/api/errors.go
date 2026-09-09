@@ -11,36 +11,38 @@ import (
 
 // Error codes are stable, public identifiers (see docs/api/openapi.yaml).
 const (
-	CodeVMNotFound          = "VM_NOT_FOUND"
-	CodeVMInvalidState      = "VM_INVALID_STATE"
-	CodeVMAlreadyExists     = "VM_ALREADY_EXISTS"
-	CodeValidationError     = "VALIDATION_ERROR"
-	CodeNotFound            = "NOT_FOUND"
-	CodeMethodNotAllowed    = "METHOD_NOT_ALLOWED"
-	CodePoolNotFound        = "STORAGE_POOL_NOT_FOUND"
-	CodePoolAlreadyExists   = "STORAGE_POOL_ALREADY_EXISTS"
-	CodeNetworkNotFound     = "NETWORK_NOT_FOUND"
-	CodeNetworkInvalidState = "NETWORK_INVALID_STATE"
-	CodeIsoNotFound         = "ISO_NOT_FOUND"
-	CodeIsoAlreadyExists    = "ISO_ALREADY_EXISTS"
-	CodeInternalError       = "INTERNAL_ERROR"
+	CodeVMNotFound           = "VM_NOT_FOUND"
+	CodeVMInvalidState       = "VM_INVALID_STATE"
+	CodeVMAlreadyExists      = "VM_ALREADY_EXISTS"
+	CodeValidationError      = "VALIDATION_ERROR"
+	CodeNotFound             = "NOT_FOUND"
+	CodeMethodNotAllowed     = "METHOD_NOT_ALLOWED"
+	CodePoolNotFound         = "STORAGE_POOL_NOT_FOUND"
+	CodePoolAlreadyExists    = "STORAGE_POOL_ALREADY_EXISTS"
+	CodeNetworkNotFound      = "NETWORK_NOT_FOUND"
+	CodeNetworkInvalidState  = "NETWORK_INVALID_STATE"
+	CodeNetworkAlreadyExists = "NETWORK_ALREADY_EXISTS"
+	CodeIsoNotFound          = "ISO_NOT_FOUND"
+	CodeIsoAlreadyExists     = "ISO_ALREADY_EXISTS"
+	CodeInternalError        = "INTERNAL_ERROR"
 )
 
 // errorStatus maps error codes to HTTP status codes.
 var errorStatus = map[string]int{
-	CodeVMNotFound:          http.StatusNotFound,
-	CodeVMInvalidState:      http.StatusConflict,
-	CodeVMAlreadyExists:     http.StatusConflict,
-	CodeValidationError:     http.StatusBadRequest,
-	CodeNotFound:            http.StatusNotFound,
-	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
-	CodePoolNotFound:        http.StatusNotFound,
-	CodePoolAlreadyExists:   http.StatusConflict,
-	CodeNetworkNotFound:     http.StatusNotFound,
-	CodeNetworkInvalidState: http.StatusConflict,
-	CodeIsoNotFound:         http.StatusNotFound,
-	CodeIsoAlreadyExists:    http.StatusConflict,
-	CodeInternalError:       http.StatusInternalServerError,
+	CodeVMNotFound:           http.StatusNotFound,
+	CodeVMInvalidState:       http.StatusConflict,
+	CodeVMAlreadyExists:      http.StatusConflict,
+	CodeValidationError:      http.StatusBadRequest,
+	CodeNotFound:             http.StatusNotFound,
+	CodeMethodNotAllowed:     http.StatusMethodNotAllowed,
+	CodePoolNotFound:         http.StatusNotFound,
+	CodePoolAlreadyExists:    http.StatusConflict,
+	CodeNetworkNotFound:      http.StatusNotFound,
+	CodeNetworkInvalidState:  http.StatusConflict,
+	CodeNetworkAlreadyExists: http.StatusConflict,
+	CodeIsoNotFound:          http.StatusNotFound,
+	CodeIsoAlreadyExists:     http.StatusConflict,
+	CodeInternalError:        http.StatusInternalServerError,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,
@@ -76,6 +78,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeNetworkNotFound, "Network was not found")
 	case errors.Is(err, hypervisor.ErrInvalidNetworkState):
 		s.writeError(w, r, CodeNetworkInvalidState, err.Error())
+	case errors.Is(err, hypervisor.ErrNetworkAlreadyExists):
+		s.writeError(w, r, CodeNetworkAlreadyExists, "A network with this name already exists")
 	case errors.Is(err, hypervisor.ErrInvalidVMState):
 		s.writeError(w, r, CodeVMInvalidState, err.Error())
 	case errors.Is(err, hypervisor.ErrVMAlreadyExists):

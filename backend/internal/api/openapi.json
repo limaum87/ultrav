@@ -498,6 +498,84 @@
             "$ref": "#/components/responses/InternalError"
           }
         }
+      },
+      "post": {
+        "operationId": "createNetwork",
+        "tags": [
+          "Network"
+        ],
+        "summary": "Create a virtual network",
+        "description": "Creates a virtual network in one of three modes:\n- `nat`: routed + NAT subnet managed by libvirt (DHCP + dnsmasq)\n- `bridge`: passthrough to an existing host bridge (VMs get IPs on the\n  host's LAN; requires a bridge such as br0 configured on the host --\n  libvirt cannot create host bridges)\n- `isolated`: internal-only subnet, no outside connectivity\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Network created (and started)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Network"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (missing bridgeName for bridge mode, bad CIDR, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A network with this name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/host/bridges": {
+      "get": {
+        "operationId": "listHostBridges",
+        "tags": [
+          "Network"
+        ],
+        "summary": "List host bridge interfaces",
+        "description": "Host Linux bridges (e.g. br0) that virtual networks in `bridge` mode can\nattach to. Creating these bridges is host configuration (netplan /\nNetworkManager), not something libvirt or UltraV does; use this list to\ndetect what exists and guide the user when nothing is available.\n",
+        "responses": {
+          "200": {
+            "description": "Host bridges (may be empty)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostBridgeList"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
       }
     },
     "/networks/{id}": {
@@ -1185,6 +1263,95 @@
             "type": "string",
             "nullable": true,
             "example": "default"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "nat",
+              "bridge",
+              "isolated"
+            ],
+            "example": "nat"
+          }
+        }
+      },
+      "NetworkCreate": {
+        "type": "object",
+        "required": [
+          "name",
+          "mode"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "lan"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "nat",
+              "bridge",
+              "isolated"
+            ],
+            "example": "nat"
+          },
+          "bridgeName": {
+            "type": "string",
+            "nullable": true,
+            "example": "br0",
+            "description": "Host bridge to attach to (required when mode is bridge)."
+          },
+          "cidr": {
+            "type": "string",
+            "nullable": true,
+            "example": "192.168.100.0/24",
+            "description": "Subnet for nat/isolated modes (required for those modes)."
+          },
+          "dhcpEnabled": {
+            "type": "boolean",
+            "nullable": true,
+            "example": true
+          },
+          "autostart": {
+            "type": "boolean",
+            "nullable": true,
+            "example": true
+          }
+        }
+      },
+      "HostBridge": {
+        "type": "object",
+        "required": [
+          "name",
+          "active"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "br0"
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "HostBridgeList": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostBridge"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "example": 1
           }
         }
       },

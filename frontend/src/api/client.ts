@@ -13,6 +13,7 @@ export type Host = components['schemas']['Host'];
 export type Capabilities = components['schemas']['Capabilities'];
 export type StoragePool = components['schemas']['StoragePool'];
 export type Network = components['schemas']['Network'];
+export type HostBridgeList = components['schemas']['HostBridgeList'];
 export type Iso = components['schemas']['Iso'];
 
 /** Uniform error handling for the standard error envelope. */
