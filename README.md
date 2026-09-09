@@ -1,55 +1,55 @@
 # UltraV
 
 <p align="center">
-  <em>Gerenciamento moderno de VMs KVM/QEMU — simples, API-first e agent-friendly.</em>
+  <em>Modern KVM/QEMU virtual machine management — simple, API-first and agent-friendly.</em>
 </p>
 
-UltraV é uma plataforma para gerenciar máquinas virtuais **KVM/QEMU** em hosts Linux únicos (pequeno e médio porte), via uma REST API descrita por OpenAPI 3.1 e uma web UI React.
+UltraV is a platform for managing **KVM/QEMU** virtual machines on single Linux hosts (small and medium scale), through a REST API described by OpenAPI 3.1 and a React web UI.
 
-> **Importante:** UltraV **não** é um hypervisor, nem um Proxmox, nem um OpenStack. É uma camada fina de gerenciamento sobre tecnologias maduras:
+> **Important:** UltraV is **not** a hypervisor, nor a Proxmox, nor an OpenStack. It is a thin management layer on top of proven technologies:
 >
 > ```
-> KVM / QEMU  →  libvirt  →  UltraV API  →  UI / CLI / Automação / AI Agents
+> KVM / QEMU  →  libvirt  →  UltraV API  →  UI / CLI / Automation / AI Agents
 > ```
 
-## ✨ Princípios
+## ✨ Principles
 
-1. **Everything is an API** — toda funcionalidade da UI existe primeiro na API; a UI é apenas mais um cliente.
-2. **Contract-first** — o contrato OpenAPI 3.1 (`docs/api/openapi.yaml`) é a fonte da verdade; tipos Go e o client TypeScript são gerados dele.
-3. **Monólito modular** — sem Kubernetes, sem microservices, sem abstrações sem necessidade concreta.
-4. **Agent-friendly** — operações semanticamente específicas (nunca `POST /execute`), prontas para autorização granular e uso seguro por agentes de IA no futuro.
-5. **Simplicidade > features** — fatias verticais pequenas e bem construídas.
+1. **Everything is an API** — every UI feature exists in the API first; the UI is just another client.
+2. **Contract-first** — the OpenAPI 3.1 contract (`docs/api/openapi.yaml`) is the source of truth; Go types and the TypeScript client are generated from it.
+3. **Modular monolith** — no Kubernetes, no microservices, no abstractions without a concrete need.
+4. **Agent-friendly** — semantically specific operations (never `POST /execute`), ready for fine-grained authorization and safe use by AI agents in the future.
+5. **Simplicity > features** — small, well-built vertical slices.
 
 ## 🧰 Stack
 
-| Camada     | Tecnologia                          |
+| Layer      | Technology                          |
 |------------|-------------------------------------|
 | Backend    | Go, `net/http` std, REST API        |
-| Hipervisor | KVM, QEMU, libvirt, QEMU Guest Agent|
-| Contrato   | OpenAPI 3.1 + Swagger UI            |
+| Hypervisor | KVM, QEMU, libvirt, QEMU Guest Agent|
+| Contract   | OpenAPI 3.1 + Swagger UI            |
 | Frontend   | React + TypeScript + Vite           |
 | Deploy     | Docker / Docker Compose, nginx      |
 | Target     | Ubuntu Server / Debian              |
 
 ## 🚀 Quick start (Docker)
 
-Nenhum host KVM é necessário — o backend roda com `MockHypervisorProvider` (VMs fictícias realistas):
+No KVM host required — the backend runs with `MockHypervisorProvider` (realistic fake VMs):
 
 ```bash
 docker compose -f deploy/docker-compose.yml up --build
 ```
 
-| Serviço  | URL                                |
+| Service  | URL                                |
 |----------|------------------------------------|
 | UI       | http://localhost:8275              |
 | Swagger  | http://localhost:8275/docs         |
 | API      | http://localhost:8275/api/v1/...   |
 
-Detalhes do deploy: [`deploy/README.md`](deploy/README.md).
+Deployment details: [`deploy/README.md`](deploy/README.md).
 
-## 🖥️ Rodar contra um host KVM real
+## 🖥️ Running against a real KVM host
 
-No host (Ubuntu 22.04+ / Debian 12):
+On the host (Ubuntu 22.04+ / Debian 12):
 
 ```bash
 sudo apt install libvirt-daemon-system qemu-kvm
@@ -58,47 +58,47 @@ HYPERVISOR_LIBVIRT_URI=qemu:///system \
 ULTRAV_PORT=8275 ./ultrav
 ```
 
-O provider libvirt usa build tag `libvirt_dlopen`: a `libvirt.so` é carregada em runtime, então **o mesmo binário** roda em modo mock ou com libvirt real.
+The libvirt provider uses the `libvirt_dlopen` build tag: `libvirt.so` is loaded at runtime, so **the same binary** runs in mock mode or against real libvirt.
 
-## 🧑‍💻 Desenvolvimento local (sem Docker)
+## 🧑‍💻 Local development (no Docker)
 
 ```bash
-# Backend (modo mock)
+# Backend (mock mode)
 cd backend && go run ./cmd/ultrav
 
-# Frontend (dev server com proxy /api)
+# Frontend (dev server with /api proxy)
 cd frontend && npm install && npm run dev
 ```
 
-Regenerar tipos/client a partir do contrato OpenAPI:
+Regenerate types/client from the OpenAPI contract:
 
 ```bash
 ./scripts/generate.sh
 ```
 
-Os artefatos gerados são versionados no repo; o build Docker do frontend **regenera** o client, garantindo que a UI nunca compila contra um contrato antigo.
+Generated artifacts are versioned in the repo; the frontend Docker build **regenerates** the client, ensuring the UI never compiles against a stale contract.
 
 ## 📡 API
 
-Prefixo `/api/v1` · Contrato: `GET /openapi.json` · Swagger UI: `GET /docs`
+Prefix `/api/v1` · Contract: `GET /openapi.json` · Swagger UI: `GET /docs`
 
-| Método | Path                                | Descrição                       |
+| Method | Path                                | Description                     |
 |--------|-------------------------------------|---------------------------------|
-| GET    | `/api/v1/host`                      | Informações do host             |
-| GET    | `/api/v1/capabilities`              | Capacidades do hipervisor       |
-| GET    | `/api/v1/vms`                       | Lista de VMs                    |
-| GET    | `/api/v1/vms/{id}`                  | Detalhes de uma VM              |
-| POST   | `/api/v1/vms/{id}/start`            | Ligar VM                        |
-| POST   | `/api/v1/vms/{id}/shutdown`         | Shutdown graceful (ACPI)        |
-| POST   | `/api/v1/vms/{id}/reboot`           | Reiniciar VM                    |
-| POST   | `/api/v1/vms/{id}/stop`             | Force stop ("puxar o cabo")     |
-| GET    | `/api/v1/storage/pools`             | Pools de storage                |
-| POST   | `/api/v1/storage/pools/{id}/refresh`| Refresh de pool                 |
-| GET    | `/api/v1/networks`                  | Redes virtuais                  |
-| POST   | `/api/v1/networks/{id}/start|stop`  | Ligar/desligar rede             |
+| GET    | `/api/v1/host`                      | Host information                |
+| GET    | `/api/v1/capabilities`              | Hypervisor capabilities         |
+| GET    | `/api/v1/vms`                       | List VMs                        |
+| GET    | `/api/v1/vms/{id}`                  | VM details                      |
+| POST   | `/api/v1/vms/{id}/start`            | Start VM                        |
+| POST   | `/api/v1/vms/{id}/shutdown`         | Graceful shutdown (ACPI)        |
+| POST   | `/api/v1/vms/{id}/reboot`           | Reboot VM                       |
+| POST   | `/api/v1/vms/{id}/stop`             | Force stop ("pull the plug")    |
+| GET    | `/api/v1/storage/pools`             | Storage pools                   |
+| POST   | `/api/v1/storage/pools/{id}/refresh`| Refresh pool                    |
+| GET    | `/api/v1/networks`                  | Virtual networks                |
+| POST   | `/api/v1/networks/{id}/start|stop`  | Start/stop network              |
 | GET    | `/api/v1/health` · `/api/v1/ready`  | Liveness / readiness            |
 
-**Error model** estável em toda resposta:
+**Stable error model** in every response:
 
 ```json
 {
@@ -110,14 +110,14 @@ Prefixo `/api/v1` · Contrato: `GET /openapi.json` · Swagger UI: `GET /docs`
 }
 ```
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
 ```
 KVM / QEMU + QEMU Guest Agent
         │
      libvirt
         │
-  HypervisorProvider   ← única fronteira com o hipervisor
+  HypervisorProvider   ← the only boundary with the hypervisor
         │
     Domain / Core
         │
@@ -125,34 +125,34 @@ KVM / QEMU + QEMU Guest Agent
         │
      OpenAPI 3.1
    ┌────┼────┬──────────┐
-  UI   CLI  Automação  AI Agents (futuro, via MCP)
+  UI   CLI  Automation  AI Agents (future, via MCP)
 ```
 
-- **`HypervisorProvider`** é a única fronteira com o libvirt. Duas implementações: `mock` (dev/testes) e `libvirt` (produção), escolhidas por env var — só o `main` conhece implementações concretas.
-- **Codegen**: `oapi-codegen` (tipos Go) e `openapi-typescript` + `openapi-fetch` (client TS). Sem DTOs paralelos, sem `fetch` manual.
-- **Segurança**: sem shell, sem comandos concatenados, validação de inputs, error model sem stack traces, correlation ID (`X-Request-Id`) em toda request, structured logging JSON.
+- **`HypervisorProvider`** is the only boundary with libvirt. Two implementations: `mock` (dev/tests) and `libvirt` (production), selected via env var — only `main` knows the concrete implementations.
+- **Codegen**: `oapi-codegen` (Go types) and `openapi-typescript` + `openapi-fetch` (TS client). No parallel DTOs, no manual `fetch`.
+- **Security**: no shell, no concatenated commands, input validation, error model without stack traces, correlation ID (`X-Request-Id`) on every request, JSON structured logging.
 
-Mais detalhes: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+More details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## 📁 Estrutura (monorepo)
+## 📁 Repository layout (monorepo)
 
 ```
 /
-├── backend/           # API Go (monólito modular)
-├── frontend/          # UI React + TypeScript + Vite
-├── docs/              # Contrato OpenAPI e design docs
-├── deploy/            # Docker Compose e artefatos de deploy
-├── scripts/           # Automação de desenvolvimento (codegen)
-├── ROADMAP.md         # Fases e milestone atual
-└── ARCHITECTURE.md    # Decisões arquiteturais
+├── backend/           # Go API (modular monolith)
+├── frontend/          # React + TypeScript + Vite UI
+├── docs/              # OpenAPI contract and design docs
+├── deploy/            # Docker Compose and deployment artifacts
+├── scripts/           # Development automation (codegen)
+├── ROADMAP.md         # Phases and current milestone
+└── ARCHITECTURE.md    # Architectural decisions
 ```
 
-## 🗺️ Status e roadmap
+## 🗺️ Status and roadmap
 
-**Fase 1 — Foundation**: backend Go + `MockHypervisorProvider` + REST API + OpenAPI/Swagger + frontend (Dashboard, Virtual Machines, VM Details), tudo executável via Docker Compose.
+**Phase 1 — Foundation**: Go backend + `MockHypervisorProvider` + REST API + OpenAPI/Swagger + frontend (Dashboard, Virtual Machines, VM Details), all runnable via Docker Compose.
 
-Próximas fases (ver [`ROADMAP.md`](ROADMAP.md)): provider libvirt real, Job System para operações assíncronas, backups incrementais com QEMU dirty bitmaps, multi-host e adapter MCP para agentes de IA.
+Upcoming phases (see [`ROADMAP.md`](ROADMAP.md)): real libvirt provider, Job System for async operations, incremental backups with QEMU dirty bitmaps, multi-host and MCP adapter for AI agents.
 
-## 📄 Licença
+## 📄 License
 
-A definir (sugestão: Apache-2.0 ou MIT).
+To be decided (suggestion: Apache-2.0 or MIT).
