@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import type { VirtualMachine } from '../api/client';
 import { formatUptime } from '../lib/hooks';
 
@@ -5,10 +7,278 @@ export function StateBadge({ state }: { state: VirtualMachine['state'] }) {
   return (
     <span className={`state state-${state}`}>
       <span className="state-dot" />
-      {state}
+      {state === 'shutting-down' ? 'shutting down' : state}
     </span>
   );
 }
+
+/* ---------- Metric card (page-level summary) ---------- */
+
+export function MetricCard({
+  label,
+  value,
+  hint,
+  tone,
+  used,
+  loading,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  tone?: 'ok' | 'warn' | 'danger';
+  /** 0-100; renders a bar when provided. */
+  used?: number | null;
+  loading?: boolean;
+}) {
+  return (
+    <div className="metric-card card">
+      <div className="metric-label">{label}</div>
+      {loading ? (
+        <span className="skeleton skeleton-metric" />
+      ) : (
+        <div className={`metric-value${tone ? ` metric-${tone}` : ''}`}>{value}</div>
+      )}
+      {used != null && !loading && (
+        <div className="metric-bar">
+          <div
+            className={`metric-bar-fill${used > 85 ? ' high' : ''}`}
+            style={{ width: `${Math.min(100, Math.max(0, used))}%` }}
+          />
+        </div>
+      )}
+      {hint != null && !loading && <div className="metric-hint">{hint}</div>}
+    </div>
+  );
+}
+
+/* ---------- Compact inline progress (table cells) ---------- */
+
+/**
+ * Used for per-VM metrics. The current API does not expose per-VM CPU/memory
+ * utilization, so pass `unavailable` and the cell renders an explicit `n/a`
+ * state instead of a fabricated value. Requires a backend addition such as
+ * `VirtualMachine.metrics` { cpuPercent, memoryUsedBytes } to light up.
+ */
+export function ProgressMetric({
+  used,
+  label,
+  unavailable,
+  unavailableReason,
+}: {
+  /** 0-100, or null when the backend does not expose this metric. */
+  used: number | null;
+  label: string;
+  unavailable?: boolean;
+  unavailableReason?: string;
+}) {
+  if (unavailable || used == null) {
+    return (
+      <span className="cell-unavailable" title={unavailableReason}>
+        n/a
+      </span>
+    );
+  }
+  return (
+    <div className="cell-progress" title={label}>
+      <span className="cell-progress-pct">{Math.round(used)}%</span>
+      <div className="metric-bar">
+        <div
+          className={`metric-bar-fill${used > 85 ? ' high' : ''}`}
+          style={{ width: `${Math.min(100, used)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Dropdown action menu (three-dot) ---------- */
+
+export interface MenuItem {
+  kind?: 'separator';
+  label?: string;
+  icon?: ReactNode;
+  to?: string;
+  onSelect?: () => void;
+  disabled?: boolean;
+  title?: string;
+  danger?: boolean;
+}
+
+export function ActionMenu({ items, label = 'Actions' }: { items: MenuItem[]; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="action-menu" ref={rootRef}>
+      <button
+        className={`action-menu-trigger${open ? ' open' : ''}`}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+          <circle cx="8" cy="3" r="1.4" />
+          <circle cx="8" cy="8" r="1.4" />
+          <circle cx="8" cy="13" r="1.4" />
+        </svg>
+      </button>
+      {open && (
+        <div className="action-menu-popover" role="menu">
+          {items.map((item, i) => {
+            if (item.kind === 'separator') return <div key={i} className="menu-sep" />;
+            const cls =
+              'menu-item' +
+              (item.danger ? ' danger' : '') +
+              (item.disabled ? ' disabled' : '');
+            const content = (
+              <>
+                {item.icon && <span className="menu-icon">{item.icon}</span>}
+                {item.label}
+              </>
+            );
+            if (item.disabled) {
+              return (
+                <span key={i} className={cls} title={item.title}>
+                  {content}
+                </span>
+              );
+            }
+            if (item.to) {
+              return (
+                <Link key={i} to={item.to} className={cls} role="menuitem" onClick={() => setOpen(false)}>
+                  {content}
+                </Link>
+              );
+            }
+            return (
+              <button
+                key={i}
+                className={cls}
+                role="menuitem"
+                title={item.title}
+                onClick={() => {
+                  setOpen(false);
+                  item.onSelect?.();
+                }}
+              >
+                {content}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Confirmation dialog (destructive actions) ---------- */
+
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  busy,
+}: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy?: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div className="wiz-overlay" onClick={onCancel}>
+      <div className="wiz confirm" onClick={(e) => e.stopPropagation()} role="alertdialog">
+        <div className="wiz-head">
+          <h2>{title}</h2>
+          <button className="wiz-close" onClick={onCancel} aria-label="Close">
+            ×
+          </button>
+        </div>
+        <div className="wiz-body">{message}</div>
+        <div className="wiz-foot">
+          <span />
+          <div className="wiz-foot-right">
+            <button className="btn" onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+            <button className="btn btn-danger-solid" onClick={onConfirm} disabled={busy}>
+              {busy ? 'Working…' : confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Empty & loading states ---------- */
+
+export function EmptyState({
+  icon = '◌',
+  title,
+  message,
+  action,
+}: {
+  icon?: ReactNode;
+  title: string;
+  message?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">{icon}</div>
+      <div className="empty-title">{title}</div>
+      {message && <div className="empty-msg">{message}</div>}
+      {action}
+    </div>
+  );
+}
+
+export function TableSkeleton({ rows = 5, cols = 8 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="table-skeleton">
+      {Array.from({ length: rows }).map((_, r) => (
+        <div className="skeleton-row" key={r}>
+          {Array.from({ length: cols }).map((__, c) => (
+            <span
+              className="skeleton"
+              key={c}
+              style={{ width: c === 0 ? '46%' : `${50 + ((r * 7 + c * 13) % 30)}%` }}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function TagChip({ label }: { label: string }) {
+  return <span className="tag-chip">{label}</span>;
+}
+
+/* ---------- legacy shared primitives (kept) ---------- */
 
 export function Gauge({
   label,

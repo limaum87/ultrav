@@ -21,6 +21,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/storage" element={<Storage />} />
           <Route path="/network" element={<NetworkPage />} />
           <Route path="/backups" element={<ComingSoon title="Backups" />} />
+          <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
           <Route path="/settings" element={<ComingSoon title="Settings" />} />
         </Route>
       </Routes>
