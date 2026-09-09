@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, unwrap, ApiError, type Host, type VirtualMachine } from '../api/client';
 import { formatBytes, formatUptime, usePolling } from '../lib/hooks';
 import {
@@ -29,6 +29,7 @@ const TAGS_AVAILABLE = false;
 
 export default function VirtualMachines() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('q') ?? '');
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -294,7 +295,20 @@ export default function VirtualMachines() {
             </thead>
             <tbody>
               {filtered.map((vm) => (
-                <tr key={vm.id} className={busy === vm.id ? 'row-busy' : undefined}>
+                <tr
+                  key={vm.id}
+                  className={`row-clickable${busy === vm.id ? ' row-busy' : ''}`}
+                  tabIndex={0}
+                  title={`Open ${vm.name} details`}
+                  onClick={(e) => {
+                    // don't hijack clicks on links, buttons or the action menu
+                    if ((e.target as HTMLElement).closest('a, button, .action-menu')) return;
+                    navigate(`/vms/${vm.id}`);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(`/vms/${vm.id}`);
+                  }}
+                >
                   <td>
                     <Link className="vm-link" to={`/vms/${vm.id}`}>
                       <Monitor size={13} className="vm-link-icon" strokeWidth={1.75} aria-hidden />

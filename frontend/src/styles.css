@@ -939,3 +939,6 @@ tr.row-busy { opacity: 0.55; }
 .btn-with-icon svg { color: var(--text-dim); }
 .btn-with-icon:hover:not(:disabled) svg { color: var(--text); }
 .vm-title-icon { color: var(--text-faint); }
+
+/* --- clickable table rows --- */
+.row-clickable { cursor: pointer; }
