@@ -153,6 +153,10 @@ More details: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Upcoming phases (see [`ROADMAP.md`](ROADMAP.md)): real libvirt provider, Job System for async operations, incremental backups with QEMU dirty bitmaps, multi-host and MCP adapter for AI agents.
 
+## 🤖 Installing this system
+
+To install UltraV on a host — manually or by delegating to an AI agent — follow the step-by-step guide in [`AGENTS.md`](AGENTS.md). It covers environment checks, mock mode, real KVM/libvirt setup, validation checklists and troubleshooting.
+
 ## 📄 License
 
 To be decided (suggestion: Apache-2.0 or MIT).
