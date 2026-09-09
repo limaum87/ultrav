@@ -4,6 +4,7 @@ import { usePolling } from '../lib/hooks';
 import { ActionMenu, EmptyState, MetricCard, TableSkeleton, type MenuItem } from '../components/ui';
 import { CreateNetworkModal } from '../components/CreateNetworkModal';
 import { useToast } from '../components/Toast';
+import { Network as NetworkIcon, CirclePlay, Zap } from 'lucide-react';
 
 export default function NetworkPage() {
   const toast = useToast();
@@ -53,9 +54,25 @@ export default function NetworkPage() {
       />
 
       <section className="metric-grid">
-        <MetricCard label="Networks" value={data?.total ?? 0} loading={loading} />
-        <MetricCard label="Active" value={active} tone="ok" loading={loading} />
-        <MetricCard label="Autostart" value={nets.filter((n) => n.autostart).length} loading={loading} />
+        <MetricCard
+          label="Networks"
+          value={data?.total ?? 0}
+          loading={loading}
+          icon={<NetworkIcon size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
+        />
+        <MetricCard
+          label="Active"
+          value={active}
+          tone="ok"
+          loading={loading}
+          icon={<CirclePlay size={24} className="ic ic-green" strokeWidth={1.75} aria-hidden />}
+        />
+        <MetricCard
+          label="Autostart"
+          value={nets.filter((n) => n.autostart).length}
+          loading={loading}
+          icon={<Zap size={24} className="ic ic-electric" strokeWidth={1.75} aria-hidden />}
+        />
       </section>
 
       <div className="card table-card">

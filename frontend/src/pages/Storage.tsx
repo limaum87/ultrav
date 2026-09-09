@@ -5,6 +5,7 @@ import { ActionMenu, EmptyState, MetricCard, TableSkeleton, type MenuItem } from
 import { IsoLibrary } from '../components/IsoLibrary';
 import { CreatePoolModal } from '../components/CreatePoolModal';
 import { useToast } from '../components/Toast';
+import { Database, HardDrive, Layers } from 'lucide-react';
 
 export default function Storage() {
   const toast = useToast();
@@ -50,13 +51,27 @@ export default function Storage() {
       </header>
 
       <section className="metric-grid">
-        <MetricCard label="Pools" value={data?.total ?? 0} hint={`${active} active`} loading={loading} />
-        <MetricCard label="Capacity" value={formatBytes(totalCap, 1)} loading={loading} />
+        <MetricCard
+          label="Pools"
+          value={data?.total ?? 0}
+          hint={`${active} active`}
+          loading={loading}
+          icon={<Database size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
+        />
+        <MetricCard
+          label="Capacity"
+          value={formatBytes(totalCap, 1)}
+          loading={loading}
+          icon={<HardDrive size={24} className="ic ic-purple" strokeWidth={1.75} aria-hidden />}
+        />
         <MetricCard
           label="Allocated"
           value={formatBytes(totalAlloc, 1)}
+          hint={totalCap ? `${Math.round((totalAlloc / totalCap) * 100)}% used` : undefined}
           used={totalCap ? (totalAlloc / totalCap) * 100 : null}
           loading={loading}
+          icon={<Layers size={24} className="ic ic-violet" strokeWidth={1.75} aria-hidden />}
+          barTone="purple"
         />
       </section>
 
