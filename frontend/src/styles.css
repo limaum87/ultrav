@@ -1,11 +1,13 @@
 :root {
-  --bg: #0b0d10;
-  --bg-elev: #12151a;
-  --bg-elev2: #171b21;
-  --border: #23282f;
-  --text: #e6e9ed;
-  --text-dim: #8b929c;
-  --text-faint: #5c636e;
+  --bg: #0c0e12;
+  --bg-elev: #13161c;
+  --bg-elev2: #191d24;
+  --bg-elev3: #1f242d;
+  --border: #262c35;
+  --border-strong: #313844;
+  --text: #e8ebef;
+  --text-dim: #9aa2ad;
+  --text-faint: #6b7480;
   --accent: #7c6cff;
   --accent-soft: rgba(124, 108, 255, 0.14);
   --ok: #3ecf8e;
@@ -113,6 +115,7 @@ body {
 /* --- topbar --- */
 .topbar {
   height: 52px;
+  background: var(--bg);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -851,3 +854,79 @@ tr.row-busy { opacity: 0.55; }
 /* --- dashboard / shared card title padding --- */
 .card-title-pad { padding: 12px 16px 0; }
 .page.error.alert { background: var(--danger-soft); border: 1px solid var(--danger); color: var(--danger); }
+
+/* ================= Visual refinement pass ================= */
+
+/* --- vivid icon system (Lucide) --- */
+.ic { display: block; }
+.ic-blue { color: #4da3ff; }
+.ic-green { color: #34d399; }
+.ic-electric { color: #38bdf8; }
+.ic-violet { color: #8b7cff; }
+.ic-purple { color: #b07cff; }
+
+/* --- metric card: icon anchor + hierarchy --- */
+.metric-card { flex-direction: row; align-items: center; gap: 14px; padding: 14px 16px; }
+.metric-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.metric-card:has(.ic-blue) .metric-icon { background: rgba(77, 163, 255, 0.13); }
+.metric-card:has(.ic-green) .metric-icon { background: rgba(52, 211, 153, 0.13); }
+.metric-card:has(.ic-electric) .metric-icon { background: rgba(56, 189, 248, 0.13); }
+.metric-card:has(.ic-violet) .metric-icon { background: rgba(139, 124, 255, 0.14); }
+.metric-card:has(.ic-purple) .metric-icon { background: rgba(176, 124, 255, 0.14); }
+.metric-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.metric-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.metric-value { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.metric-hint { font-size: 11.5px; color: var(--text-dim); }
+
+/* --- semantic progress bars --- */
+.metric-bar-fill { transition: width 0.4s ease, background 0.3s ease; }
+.metric-bar-fill.tone-blue { background: linear-gradient(90deg, #38bdf8, #4da3ff); }
+.metric-bar-fill.tone-green { background: linear-gradient(90deg, #34d399, #3ecf8e); }
+.metric-bar-fill.tone-violet { background: linear-gradient(90deg, #8b7cff, #a78bfa); }
+.metric-bar-fill.tone-purple { background: linear-gradient(90deg, #a855f7, #b07cff); }
+.metric-bar-fill.warn { background: linear-gradient(90deg, #f5a623, #fbbf24); }
+.metric-bar-fill.crit { background: linear-gradient(90deg, #ef4444, #f2555a); }
+.metric-bar-fill.high { background: linear-gradient(90deg, #f5a623, #fbbf24); } /* legacy alias */
+
+/* --- table polish --- */
+.table th { color: var(--text-dim); }
+.table tbody tr { transition: background 0.12s ease; }
+.table tbody tr:hover { background: var(--bg-elev2); }
+.vm-link { display: inline-flex; align-items: center; gap: 7px; }
+.vm-link-icon { color: var(--text-faint); flex-shrink: 0; transition: color 0.12s; }
+.vm-link:hover .vm-link-icon { color: var(--accent); }
+
+/* --- surfaces: elevated dropdowns, cards --- */
+.card { background: var(--bg-elev); }
+.action-menu-popover { background: var(--bg-elev3); border-color: var(--border-strong); }
+.host-card { background: var(--bg-elev2); }
+.host-name-id { display: inline-flex; align-items: center; gap: 7px; color: var(--text-dim); }
+.host-name-id svg { color: var(--text-faint); }
+.docs-link { display: inline-flex; align-items: center; gap: 7px; }
+.docs-link:hover svg { color: var(--accent); }
+
+/* --- focus states --- */
+.btn:focus-visible, .icon-btn:focus-visible, .action-menu-trigger:focus-visible,
+.tab:focus-visible, .filter-select:focus-visible, .nav-item:focus-visible,
+.view-toggle button:focus-visible, .menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* --- subtle contrast lifts --- */
+.subtitle { color: var(--text-dim); }
+.cell-sub, .host-sub { color: var(--text-dim); }

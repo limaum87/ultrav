@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { VirtualMachine } from '../api/client';
+import { EllipsisVertical } from 'lucide-react';
 import { formatUptime } from '../lib/hooks';
 
 export function StateBadge({ state }: { state: VirtualMachine['state'] }) {
@@ -21,6 +22,8 @@ export function MetricCard({
   tone,
   used,
   loading,
+  icon,
+  barTone = 'blue',
 }: {
   label: string;
   value: ReactNode;
@@ -29,24 +32,31 @@ export function MetricCard({
   /** 0-100; renders a bar when provided. */
   used?: number | null;
   loading?: boolean;
+  /** Vivid Lucide icon rendered inside a 44x44 tinted container. */
+  icon?: ReactNode;
+  /** Bar color under normal utilization; amber >75%, red >90%. */
+  barTone?: 'blue' | 'green' | 'violet' | 'purple';
 }) {
+  const pct = used == null ? null : Math.min(100, Math.max(0, used));
+  const fillCls =
+    pct == null ? '' : pct > 90 ? ' crit' : pct > 75 ? ' warn' : ` tone-${barTone}`;
   return (
     <div className="metric-card card">
-      <div className="metric-label">{label}</div>
-      {loading ? (
-        <span className="skeleton skeleton-metric" />
-      ) : (
-        <div className={`metric-value${tone ? ` metric-${tone}` : ''}`}>{value}</div>
-      )}
-      {used != null && !loading && (
-        <div className="metric-bar">
-          <div
-            className={`metric-bar-fill${used > 85 ? ' high' : ''}`}
-            style={{ width: `${Math.min(100, Math.max(0, used))}%` }}
-          />
-        </div>
-      )}
-      {hint != null && !loading && <div className="metric-hint">{hint}</div>}
+      {icon && <div className="metric-icon">{icon}</div>}
+      <div className="metric-body">
+        <div className="metric-label">{label}</div>
+        {loading ? (
+          <span className="skeleton skeleton-metric" />
+        ) : (
+          <div className={`metric-value${tone ? ` metric-${tone}` : ''}`}>{value}</div>
+        )}
+        {pct != null && !loading && (
+          <div className="metric-bar">
+            <div className={`metric-bar-fill${fillCls}`} style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        {hint != null && !loading && <div className="metric-hint">{hint}</div>}
+      </div>
     </div>
   );
 }
@@ -83,7 +93,7 @@ export function ProgressMetric({
       <span className="cell-progress-pct">{Math.round(used)}%</span>
       <div className="metric-bar">
         <div
-          className={`metric-bar-fill${used > 85 ? ' high' : ''}`}
+          className={`metric-bar-fill${used > 90 ? ' crit' : used > 75 ? ' warn' : ''}`}
           style={{ width: `${Math.min(100, used)}%` }}
         />
       </div>
@@ -132,11 +142,7 @@ export function ActionMenu({ items, label = 'Actions' }: { items: MenuItem[]; la
         aria-label={label}
         title={label}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
-          <circle cx="8" cy="3" r="1.4" />
-          <circle cx="8" cy="8" r="1.4" />
-          <circle cx="8" cy="13" r="1.4" />
-        </svg>
+        <EllipsisVertical size={16} strokeWidth={2} aria-hidden />
       </button>
       {open && (
         <div className="action-menu-popover" role="menu">

@@ -1,6 +1,7 @@
 import { api, unwrap, type Host, type VirtualMachine } from '../api/client';
 import { formatBytes, formatUptime, usePolling } from '../lib/hooks';
 import { EmptyState, MetricCard, StateBadge, TableSkeleton } from '../components/ui';
+import { Cpu, MemoryStick, HardDrive, Monitor } from 'lucide-react';
 
 export default function Dashboard() {
   const { data, error, loading } = usePolling(async () => {
@@ -44,12 +45,17 @@ export default function Dashboard() {
           used={cpuPct}
           hint={host ? `${host.cpu.model} · ${host.cpu.threads} threads` : undefined}
           loading={loading}
+          icon={<Cpu size={24} className="ic ic-electric" strokeWidth={1.75} aria-hidden />}
+          barTone="blue"
         />
         <MetricCard
           label="Memory Usage"
           value={host ? `${formatBytes(host.memoryUsedBytes, 1)} / ${formatBytes(host.memoryTotalBytes, 0)}` : '—'}
           used={host ? memPct : null}
+          hint={host ? `${Math.round(memPct)}% used` : undefined}
           loading={loading}
+          icon={<MemoryStick size={24} className="ic ic-violet" strokeWidth={1.75} aria-hidden />}
+          barTone="violet"
         />
         <MetricCard
           label="Storage Usage"
@@ -59,14 +65,17 @@ export default function Dashboard() {
               : '—'
           }
           used={storPct}
+          hint={storPct != null ? `${Math.round(storPct)}% used` : undefined}
           loading={loading}
+          icon={<HardDrive size={24} className="ic ic-purple" strokeWidth={1.75} aria-hidden />}
+          barTone="purple"
         />
         <MetricCard
           label="Virtual Machines"
           value={vms?.total ?? 0}
           hint={vms ? `${running} running · ${vms.total - running} stopped` : undefined}
-          tone="ok"
           loading={loading}
+          icon={<Monitor size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
         />
       </section>
 

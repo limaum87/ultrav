@@ -4,45 +4,35 @@ import { api, unwrap, type Host } from '../api/client';
 import { formatBytes, usePolling } from '../lib/hooks';
 import { ToastProvider } from '../components/Toast';
 
-/* ---------- icons (inline SVG, 16px grid) ---------- */
+/* ---------- icons (Lucide, unified icon system) ---------- */
 
-const I = {
-  dashboard: 'M2 2h5v5H2zM9 2h5v3H9zM9 7h5v7H9zM2 9h5v5H2z',
-  vm: 'M1.5 3h13v8h-13zM6 13h4M8 11v2',
-  storage: 'M2 4h12v3H2zm0 5h12v3H2z',
-  network: 'M8 1.5 14 5v6L8 14.5 2 11V5zM8 8.5 14 5M8 8.5 2 5M8 8.5v6',
-  backup: 'M3 2h10v12H3zM6 5h4M6 8h4M6 11h4',
-  tasks: 'M3 4.5 5 6.5 8.5 3M3 10.5 5 12.5 8.5 9M11 5h2M11 11h2',
-  settings:
-    'M8 5.8A2.2 2.2 0 1 0 8 10.2 2.2 2.2 0 0 0 8 5.8zM8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4',
-};
+import {
+  LayoutDashboard,
+  Monitor,
+  HardDrive,
+  Network,
+  DatabaseBackup,
+  ListChecks,
+  Settings,
+  Search,
+  Bell,
+  Server,
+  BookOpen,
+  type LucideIcon,
+} from 'lucide-react';
 
-const stroke = (d: string) => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 16 16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden
-  >
-    <path d={d} />
-  </svg>
-);
+const navIcon = (Icon: LucideIcon) => <Icon size={16} strokeWidth={1.75} aria-hidden />;
 
 /* ---------- navigation ---------- */
 
 const nav = [
-  { to: '/', label: 'Dashboard', icon: stroke(I.dashboard), end: true },
-  { to: '/vms', label: 'Virtual Machines', icon: stroke(I.vm), end: false },
-  { to: '/storage', label: 'Storage', icon: stroke(I.storage), end: false },
-  { to: '/network', label: 'Network', icon: stroke(I.network), end: false },
-  { to: '/backups', label: 'Backups', icon: stroke(I.backup), end: false, soon: true },
-  { to: '/tasks', label: 'Tasks', icon: stroke(I.tasks), end: false, soon: true },
-  { to: '/settings', label: 'Settings', icon: stroke(I.settings), end: false, soon: true },
+  { to: '/', label: 'Dashboard', icon: navIcon(LayoutDashboard), end: true },
+  { to: '/vms', label: 'Virtual Machines', icon: navIcon(Monitor), end: false },
+  { to: '/storage', label: 'Storage', icon: navIcon(HardDrive), end: false },
+  { to: '/network', label: 'Network', icon: navIcon(Network), end: false },
+  { to: '/backups', label: 'Backups', icon: navIcon(DatabaseBackup), end: false, soon: true },
+  { to: '/tasks', label: 'Tasks', icon: navIcon(ListChecks), end: false, soon: true },
+  { to: '/settings', label: 'Settings', icon: navIcon(Settings), end: false, soon: true },
 ];
 
 /* ---------- host status card (bottom of sidebar) ---------- */
@@ -64,7 +54,10 @@ function HostStatusCard({ host, vmCount, online }: { host: Host | null; vmCount:
   return (
     <div className="host-card" title={`${host.operatingSystem} · kernel ${host.kernel}`}>
       <div className="host-row host-name">
-        <span>{host.hostname}</span>
+        <span className="host-name-id">
+          <Server size={13} strokeWidth={1.75} aria-hidden />
+          {host.hostname}
+        </span>
         <span className={`state${online ? ' state-running' : ' state-error'}`}>
           <span className="state-dot" />
           {online ? 'Online' : 'Offline'}
@@ -72,7 +65,7 @@ function HostStatusCard({ host, vmCount, online }: { host: Host | null; vmCount:
       </div>
       <div className="host-row host-sub">
         {kvm == null ? 'hypervisor' : kvm ? 'KVM' : 'no KVM'} · {formatBytes(host.memoryTotalBytes, 0)} ·{' '}
-        {vmCount ?? '—'} VMs
+        {vmCount == null ? '—' : `${vmCount} VM${vmCount === 1 ? '' : 's'}`}
       </div>
     </div>
   );
@@ -94,10 +87,7 @@ function Topbar() {
         }}
         role="search"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-          <circle cx="7" cy="7" r="4.5" />
-          <path d="m10.5 10.5 3 3" strokeLinecap="round" />
-        </svg>
+        <Search size={14} strokeWidth={1.75} aria-hidden />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -107,9 +97,7 @@ function Topbar() {
       </form>
       <div className="topbar-right">
         <button className="icon-btn" title="Notifications (coming in a later phase)" disabled>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
-            <path d="M4 6.5a4 4 0 0 1 8 0c0 3 1 4 1 4H3s1-1 1-4M6.5 13a1.5 1.5 0 0 0 3 0" />
-          </svg>
+          <Bell size={15} strokeWidth={1.75} aria-hidden />
         </button>
         <div className="user-chip" title="Local administration (no authentication in this phase)">
           <span className="user-avatar">A</span>
@@ -165,7 +153,7 @@ export default function AppShell() {
               online={!error && !!hostData}
             />
             <a href="/docs" target="_blank" rel="noreferrer" className="docs-link">
-              API Docs ↗
+              <BookOpen size={13} strokeWidth={1.75} aria-hidden /> API Docs
             </a>
           </div>
         </aside>

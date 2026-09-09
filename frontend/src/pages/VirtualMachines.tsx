@@ -13,6 +13,7 @@ import {
   type MenuItem,
 } from '../components/ui';
 import { CreateVMWizard } from '../components/CreateVMWizard';
+import { Boxes, CirclePlay, Cpu, MemoryStick, HardDrive, Monitor } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
@@ -139,26 +140,45 @@ export default function VirtualMachines() {
 
       {/* Summary cards — real data from /vms + /host */}
       <section className="metric-grid">
-        <MetricCard label="Total VMs" value={loading ? '' : items.length} loading={loading} />
-        <MetricCard label="Running" value={running} tone="ok" loading={loading} />
+        <MetricCard
+          label="Total VMs"
+          value={loading ? '' : items.length}
+          loading={loading}
+          icon={<Boxes size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
+        />
+        <MetricCard
+          label="Running"
+          value={running}
+          tone="ok"
+          loading={loading}
+          icon={<CirclePlay size={24} className="ic ic-green" strokeWidth={1.75} aria-hidden />}
+        />
         <MetricCard
           label="CPU Usage"
           value={host ? `${(host.cpu.usagePercent ?? 0).toFixed(0)}%` : '—'}
           used={host ? (host.cpu.usagePercent ?? 0) : null}
           hint={host ? `${host.cpu.threads} threads` : undefined}
           loading={loading}
+          icon={<Cpu size={24} className="ic ic-electric" strokeWidth={1.75} aria-hidden />}
+          barTone="blue"
         />
         <MetricCard
           label="Memory Usage"
           value={`${memUsed} / ${memTotal}`}
           used={host ? (host.memoryUsedBytes / host.memoryTotalBytes) * 100 : null}
+          hint={host ? `${Math.round((host.memoryUsedBytes / host.memoryTotalBytes) * 100)}% used` : undefined}
           loading={loading}
+          icon={<MemoryStick size={24} className="ic ic-violet" strokeWidth={1.75} aria-hidden />}
+          barTone="violet"
         />
         <MetricCard
           label="Storage Usage"
           value={`${storUsed} / ${storTotal}`}
           used={storPct}
+          hint={storPct != null ? `${Math.round(storPct)}% used` : undefined}
           loading={loading}
+          icon={<HardDrive size={24} className="ic ic-purple" strokeWidth={1.75} aria-hidden />}
+          barTone="purple"
         />
       </section>
 
@@ -273,6 +293,7 @@ export default function VirtualMachines() {
                 <tr key={vm.id} className={busy === vm.id ? 'row-busy' : undefined}>
                   <td>
                     <Link className="vm-link" to={`/vms/${vm.id}`}>
+                      <Monitor size={13} className="vm-link-icon" strokeWidth={1.75} aria-hidden />
                       {vm.name}
                     </Link>
                     {vm.os && <div className="cell-sub">{vm.os}</div>}
