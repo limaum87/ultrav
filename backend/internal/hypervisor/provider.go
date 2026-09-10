@@ -59,6 +59,9 @@ var (
 	ErrVMNotFound = errVMNotFound{}
 	// ErrVMAlreadyExists is returned when creating a VM whose name is taken.
 	ErrVMAlreadyExists = errors.New("a virtual machine with this name already exists")
+	// ErrConsoleUnavailable is returned when the VM has no graphical console
+	// (no <graphics> device in its domain XML).
+	ErrConsoleUnavailable = errors.New("this virtual machine has no graphical console configured")
 	// ErrInvalidVMState is returned when an operation is not valid for the
 	// current VM state (e.g. starting an already running VM).
 	ErrInvalidVMState = errInvalidVMState{}

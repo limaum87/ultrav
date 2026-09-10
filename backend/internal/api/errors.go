@@ -27,6 +27,7 @@ const (
 	CodeUnauthorized         = "UNAUTHORIZED"
 	CodeInvalidCredentials   = "INVALID_CREDENTIALS"
 	CodeInternalError        = "INTERNAL_ERROR"
+	CodeConsoleUnavailable  = "CONSOLE_UNAVAILABLE"
 )
 
 // errorStatus maps error codes to HTTP status codes.
@@ -47,6 +48,7 @@ var errorStatus = map[string]int{
 	CodeUnauthorized:         http.StatusUnauthorized,
 	CodeInvalidCredentials:   http.StatusUnauthorized,
 	CodeInternalError:        http.StatusInternalServerError,
+	CodeConsoleUnavailable:  http.StatusConflict,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,
@@ -90,6 +92,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeVMAlreadyExists, "A virtual machine with this name already exists")
 	case errors.Is(err, hypervisor.ErrIsoNotFound):
 		s.writeError(w, r, CodeIsoNotFound, "ISO image was not found")
+	case errors.Is(err, hypervisor.ErrConsoleUnavailable):
+		s.writeError(w, r, CodeConsoleUnavailable, "This virtual machine has no graphical console configured (add a VNC <graphics> device to its domain XML)")
 	default:
 		s.writeError(w, r, CodeInternalError, "")
 	}

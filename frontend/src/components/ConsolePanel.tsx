@@ -14,11 +14,33 @@ export function ConsolePanel({ vm }: { vm: VirtualMachine }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RFB | null>(null);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const [unavailable, setUnavailable] = useState(false);
   const [retry, setRetry] = useState(0);
   const running = vm.state === 'running';
 
+  // Preflight: a failed WS handshake gives noVNC no error details, so ask the
+  // endpoint first to distinguish "no graphics device" from transient errors.
   useEffect(() => {
     if (!running) return;
+    let cancelled = false;
+    const token = getToken();
+    const q = token ? `?token=${encodeURIComponent(token)}` : '';
+    fetch(`/api/v1/vms/${encodeURIComponent(vm.id)}/console${q}`, {
+      headers: { Connection: 'Upgrade', Upgrade: 'websocket' },
+    })
+      .then(async (res) => {
+        if (res.status === 409) {
+          const body = await res.json().catch(() => null);
+          if (body?.error?.code === 'CONSOLE_UNAVAILABLE' && !cancelled) setUnavailable(true);
+        } else if (!cancelled) setUnavailable(false);
+      })
+      // A 101 upgrade makes fetch() throw — that means the endpoint is alive.
+      .catch(() => { if (!cancelled) setUnavailable(false); });
+    return () => { cancelled = true; };
+  }, [vm.id, running]);
+
+  useEffect(() => {
+    if (!running || unavailable) return;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     // The auth middleware accepts ?token= because browsers cannot set
     // Authorization headers on a WebSocket handshake.
@@ -53,7 +75,20 @@ export function ConsolePanel({ vm }: { vm: VirtualMachine }) {
       rfb?.disconnect();
       rfbRef.current = null;
     };
-  }, [vm.id, running, retry]);
+  }, [vm.id, running, retry, unavailable]);
+
+  if (unavailable) {
+    return (
+      <div className="card console-status">
+        <Monitor size={24} strokeWidth={1.75} aria-hidden />
+        <p>
+          <strong>{vm.name}</strong> has no graphical console configured. Add a VNC
+          <code> &lt;graphics&gt;</code> device to its domain XML and restart the VM — VMs created by
+          UltraV from now on include one automatically.
+        </p>
+      </div>
+    );
+  }
 
   if (!running) {
     return (

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	libvirt "libvirt.org/go/libvirt"
@@ -31,6 +32,14 @@ func (p *Provider) OpenVMConsole(_ context.Context, id string) (net.Conn, error)
 	}
 	if state != libvirt.DOMAIN_RUNNING && state != libvirt.DOMAIN_BLOCKED {
 		return nil, fmt.Errorf("%w: console requires a running virtual machine", hypervisor.ErrInvalidVMState)
+	}
+	// Fail with a clear error when the domain simply has no graphics device.
+	xml, err := dom.GetXMLDesc(0)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.Contains(xml, "<graphics") {
+		return nil, hypervisor.ErrConsoleUnavailable
 	}
 	// The file descriptor must outlive this callback's scope; it is owned by
 	// the returned net.Conn and closed by the caller.

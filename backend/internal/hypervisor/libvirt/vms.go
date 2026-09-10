@@ -176,6 +176,16 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
     </disk>`, xmlEscape(isoPath))
 		}
 
+		// VNC console bound to localhost: the web console reaches it through
+		// virDomainOpenGraphicsFD; it is never exposed on the network directly.
+		graphics := `
+    <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
+      <listen type='address' address='127.0.0.1'/>
+    </graphics>
+    <video>
+      <model type='vga'/>
+    </video>`
+
 		domXML := fmt.Sprintf(`<domain type='kvm'>
   <name>%s</name>
   <memory unit='bytes'>%d</memory>
@@ -198,9 +208,9 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
       <source network='%s'/>
       <model type='virtio'/>
     </interface>
-    <console type='pty'/>
+    <console type='pty'/>%s
   </devices>
-</domain>`, xmlEscape(req.Name), req.MemoryBytes, req.Vcpus, format, xmlEscape(volPath), xmlEscape(*req.NetworkId), osBoot, diskBootTag, cdrom)
+</domain>`, xmlEscape(req.Name), req.MemoryBytes, req.Vcpus, osBoot, format, xmlEscape(volPath), diskBootTag, cdrom, xmlEscape(*req.NetworkId), graphics)
 		dom, err := c.DomainDefineXML(domXML)
 		if err != nil {
 			// Best-effort cleanup of the volume we just allocated.
