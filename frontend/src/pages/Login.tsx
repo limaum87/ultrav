@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { Server } from 'lucide-react';
 
 export default function Login() {
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -15,6 +18,9 @@ export default function Login() {
     setBusy(true);
     try {
       await login(username.trim(), password);
+      // Redirect to the page that triggered the login (or the dashboard).
+      const from = (location.state as { from?: string } | null)?.from ?? '/';
+      navigate(from, { replace: true });
     } catch (err) {
       setError(
         err instanceof Error && /credentials/i.test(err.message)
