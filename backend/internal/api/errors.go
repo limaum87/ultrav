@@ -95,6 +95,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 	case errors.Is(err, hypervisor.ErrConsoleUnavailable):
 		s.writeError(w, r, CodeConsoleUnavailable, "This virtual machine has no graphical console configured (add a VNC <graphics> device to its domain XML)")
 	default:
+		// Keep the underlying cause in the logs; the response stays generic.
+		s.log.Error("provider error", "requestId", RequestID(r), "method", r.Method, "path", r.URL.Path, "err", err.Error())
 		s.writeError(w, r, CodeInternalError, "")
 	}
 }
