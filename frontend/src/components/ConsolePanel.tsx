@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import RFB from '@novnc/novnc';
 import type { VirtualMachine } from '../api/client';
+import { getToken } from '../api/client';
 import { StateBadge } from './ui';
 import { Monitor } from 'lucide-react';
 
@@ -19,7 +20,11 @@ export function ConsolePanel({ vm }: { vm: VirtualMachine }) {
   useEffect(() => {
     if (!running) return;
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/api/v1/vms/${encodeURIComponent(vm.id)}/console`;
+    // The auth middleware accepts ?token= because browsers cannot set
+    // Authorization headers on a WebSocket handshake.
+    const token = getToken();
+    const q = token ? `?token=${encodeURIComponent(token)}` : '';
+    const url = `${proto}://${location.host}/api/v1/vms/${encodeURIComponent(vm.id)}/console${q}`;
     setStatus('connecting');
 
     let disposed = false;

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs go inside golang:1.23 (no local toolchain required). Usage: ./go.sh build ./...
+exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" -v ultrav-gocache:/go -w /src/backend golang:1.23 "go" "$@"

@@ -4,6 +4,43 @@
  */
 
 export interface paths {
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticate and obtain a bearer token
+         * @description Validates credentials against the local user database (SQLite) and returns a signed JWT bearer token. All other endpoints (except /health and /ready) require `Authorization: Bearer <token>`.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the authenticated user */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/host": {
         parameters: {
             query?: never;
@@ -444,6 +481,43 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LoginRequest: {
+            /** @example admin */
+            username: string;
+            /**
+             * Format: password
+             * @example secret
+             */
+            password: string;
+        };
+        LoginResponse: {
+            /**
+             * @description JWT bearer token
+             * @example eyJhbGciOi...
+             */
+            token: string;
+            /** @example Bearer */
+            tokenType: string;
+            /** @example 86400 */
+            expiresInSeconds: number;
+            user: components["schemas"]["User"];
+        };
+        User: {
+            /** @example 1 */
+            id: number;
+            /** @example admin */
+            username: string;
+            /**
+             * @example admin
+             * @enum {string}
+             */
+            role: "admin" | "viewer";
+            /**
+             * Format: date-time
+             * @example 2025-09-01T12:00:00Z
+             */
+            createdAt: string;
+        };
         Error: {
             error: {
                 /** @example VM_NOT_FOUND */
@@ -868,6 +942,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Missing or invalid bearer token */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "UNAUTHORIZED",
+                 *         "message": "Authentication required",
+                 *         "requestId": "req_01HV3M9Z2N"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /** @description Virtual machine identifier (name). */
@@ -881,6 +973,75 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "username": "admin",
+                 *       "password": "secret"
+                 *     }
+                 */
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Invalid credentials */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "INVALID_CREDENTIALS",
+                     *         "message": "Invalid username or password",
+                     *         "requestId": "req_x"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     getHost: {
         parameters: {
             query?: never;

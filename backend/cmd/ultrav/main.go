@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ultrav/ultrav/backend/internal/api"
+	"github.com/ultrav/ultrav/backend/internal/auth"
 	"github.com/ultrav/ultrav/backend/internal/config"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/libvirt"
@@ -43,12 +44,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := api.NewServer(provider, isos, log)
+	// Auth: SQLite user store + JWT bearer tokens (nil would disable auth).
+	authn, err := auth.Open(cfg.DBPath, cfg.JWTSecret, log)
+	if err != nil {
+		log.Error("failed to open user database", "path", cfg.DBPath, "err", err)
+		os.Exit(1)
+	}
+	defer authn.Close()
+	if err := authn.BootstrapAdmin(cfg.AdminUser, cfg.AdminPassword, log); err != nil {
+		log.Error("failed to bootstrap admin user", "err", err)
+		os.Exit(1)
+	}
+
+	srv := api.NewServer(provider, isos, authn, log)
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+
 
 	// CORS is applied around the whole handler chain.
 	handler := api.WithCORS(cfg.CORSOrigin, httpServer.Handler)

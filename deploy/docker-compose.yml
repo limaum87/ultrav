@@ -8,8 +8,16 @@ services:
       ULTRAV_PORT: "8080"
       ULTRAV_CORS_ORIGIN: ""
       ULTRAV_ISO_DIR: /var/lib/ultrav/isos
+      ULTRAV_DB_PATH: /var/lib/ultrav/data/ultrav.db
+      # Senha do admin inicial (criado só na primeira inicialização, banco vazio).
+      # Se vazia, uma senha aleatória é gerada e registrada no log do backend.
+      ULTRAV_ADMIN_USER: admin
+      ULTRAV_ADMIN_PASSWORD: ""
+      # Defina um segredo fixo para que as sessões sobrevivam a restarts:
+      # ULTRAV_JWT_SECRET: troque-por-um-segredo-longo
     volumes:
       - ultrav-isos:/var/lib/ultrav/isos
+      - ultrav-data:/var/lib/ultrav/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
@@ -31,3 +39,4 @@ services:
 
 volumes:
   ultrav-isos:
+  ultrav-data:

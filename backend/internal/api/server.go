@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
+	"github.com/ultrav/ultrav/backend/internal/auth"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
 	"github.com/ultrav/ultrav/backend/internal/iso"
 )
@@ -28,14 +29,16 @@ var openapiJSON embed.FS
 type Server struct {
 	provider hypervisor.Provider
 	isos     *iso.Store
+	authn    *auth.Service // nil disables authentication (tests)
 	log      *slog.Logger
 	router   *http.ServeMux
 }
 
-// NewServer builds the API server. The generated openapi.json is embedded and
-// served at /openapi.json with Swagger UI at /docs.
-func NewServer(provider hypervisor.Provider, isos *iso.Store, log *slog.Logger) *Server {
-	s := &Server{provider: provider, isos: isos, log: log, router: http.NewServeMux()}
+// NewServer builds the API server. Pass a non-nil auth service to require
+// bearer tokens on protected endpoints. The generated openapi.json is
+// embedded and served at /openapi.json with Swagger UI at /docs.
+func NewServer(provider hypervisor.Provider, isos *iso.Store, authn *auth.Service, log *slog.Logger) *Server {
+	s := &Server{provider: provider, isos: isos, authn: authn, log: log, router: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -46,6 +49,9 @@ var vmIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 func (s *Server) routes() {
 	mux := s.router
 
+	// Auth (login is public; /auth/me is protected)
+	mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+	mux.HandleFunc("GET /api/v1/auth/me", s.handleGetCurrentUser)
 	// Health
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/ready", s.handleReadiness)
@@ -92,7 +98,7 @@ func (s *Server) routes() {
 
 // Handler returns the fully wrapped HTTP handler.
 func (s *Server) Handler() http.Handler {
-	return withSecurityHeaders(withRecovery(s.log, withRequestID(withLogging(s.log, s.router))))
+	return withSecurityHeaders(withRecovery(s.log, withRequestID(withLogging(s.log, s.withAuth(s.router)))))
 }
 
 // --- health ---

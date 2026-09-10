@@ -29,6 +29,8 @@ ENV ULTRAV_PORT=8080
 EXPOSE 8080
 # ISO library directory: pre-owned by the runtime user so named volumes
 # inherit the right ownership on first mount.
-RUN mkdir -p /var/lib/ultrav/isos && chown -R nobody:nogroup /var/lib/ultrav
+# Data directory: same treatment — the SQLite user DB lives there.
+RUN mkdir -p /var/lib/ultrav/isos /var/lib/ultrav/data \
+      && chown -R nobody:nogroup /var/lib/ultrav
 USER nobody
 ENTRYPOINT ["ultrav"]

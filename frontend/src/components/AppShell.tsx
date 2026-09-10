@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { api, unwrap, type Host } from '../api/client';
 import { formatBytes, usePolling } from '../lib/hooks';
+import { useAuth } from '../lib/auth';
 import { ToastProvider } from '../components/Toast';
 
 /* ---------- icons (Lucide, unified icon system) ---------- */
@@ -18,6 +19,9 @@ import {
   Bell,
   Server,
   BookOpen,
+  LogOut,
+  UserRound,
+  ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -71,6 +75,61 @@ function HostStatusCard({ host, vmCount, online }: { host: Host | null; vmCount:
   );
 }
 
+/* ---------- user menu ---------- */
+
+function UserMenu() {
+  const { user, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const initial = (user?.username ?? '?').charAt(0).toUpperCase();
+
+  return (
+    <div className="user-menu" ref={ref}>
+      <button
+        className="user-chip"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <span className="user-avatar">{initial}</span>
+        <span className="user-name">{user?.username ?? '—'}</span>
+        <ChevronDown size={13} strokeWidth={1.75} aria-hidden />
+      </button>
+      {open && (
+        <div className="user-dropdown" role="menu">
+          <div className="user-dropdown-header">
+            <UserRound size={14} strokeWidth={1.75} aria-hidden />
+            <div>
+              <div className="user-dropdown-name">{user?.username}</div>
+              <div className="user-dropdown-role">{user?.role === 'viewer' ? 'Somente leitura' : 'Administrador'}</div>
+            </div>
+          </div>
+          <button
+            className="user-dropdown-item"
+            role="menuitem"
+            onClick={() => {
+              logout();
+              setOpen(false);
+            }}
+          >
+            <LogOut size={14} strokeWidth={1.75} aria-hidden /> Sair
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- topbar ---------- */
 
 function Topbar() {
@@ -99,10 +158,7 @@ function Topbar() {
         <button className="icon-btn" title="Notifications (coming in a later phase)" disabled>
           <Bell size={15} strokeWidth={1.75} aria-hidden />
         </button>
-        <div className="user-chip" title="Local administration (no authentication in this phase)">
-          <span className="user-avatar">A</span>
-          <span className="user-name">admin</span>
-        </div>
+        <UserMenu />
       </div>
     </header>
   );

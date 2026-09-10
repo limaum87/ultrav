@@ -24,6 +24,8 @@ const (
 	CodeNetworkAlreadyExists = "NETWORK_ALREADY_EXISTS"
 	CodeIsoNotFound          = "ISO_NOT_FOUND"
 	CodeIsoAlreadyExists     = "ISO_ALREADY_EXISTS"
+	CodeUnauthorized         = "UNAUTHORIZED"
+	CodeInvalidCredentials   = "INVALID_CREDENTIALS"
 	CodeInternalError        = "INTERNAL_ERROR"
 )
 
@@ -42,6 +44,8 @@ var errorStatus = map[string]int{
 	CodeNetworkAlreadyExists: http.StatusConflict,
 	CodeIsoNotFound:          http.StatusNotFound,
 	CodeIsoAlreadyExists:     http.StatusConflict,
+	CodeUnauthorized:         http.StatusUnauthorized,
+	CodeInvalidCredentials:   http.StatusUnauthorized,
 	CodeInternalError:        http.StatusInternalServerError,
 }
 

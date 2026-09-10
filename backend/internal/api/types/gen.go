@@ -9,6 +9,10 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+const (
+	BearerAuthScopes = "bearerAuth.Scopes"
+)
+
 // Defines values for DiskBus.
 const (
 	DiskBusSata   DiskBus = "sata"
@@ -94,6 +98,12 @@ const (
 // Defines values for StoragePoolCreateType.
 const (
 	StoragePoolCreateTypeDir StoragePoolCreateType = "dir"
+)
+
+// Defines values for UserRole.
+const (
+	Admin  UserRole = "admin"
+	Viewer UserRole = "viewer"
 )
 
 // Defines values for VMState.
@@ -229,6 +239,22 @@ type IsoList struct {
 	Total int   `json:"total"`
 }
 
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// LoginResponse defines model for LoginResponse.
+type LoginResponse struct {
+	ExpiresInSeconds int `json:"expiresInSeconds"`
+
+	// Token JWT bearer token
+	Token     string `json:"token"`
+	TokenType string `json:"tokenType"`
+	User      User   `json:"user"`
+}
+
 // Network defines model for Network.
 type Network struct {
 	Autostart   bool         `json:"autostart"`
@@ -338,6 +364,17 @@ type StoragePoolList struct {
 	Total int           `json:"total"`
 }
 
+// User defines model for User.
+type User struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Id        int       `json:"id"`
+	Role      UserRole  `json:"role"`
+	Username  string    `json:"username"`
+}
+
+// UserRole defines model for User.Role.
+type UserRole string
+
 // VMState - running: powered on and operational
 // - stopped: powered off
 // - shutting-down: graceful shutdown in progress
@@ -394,6 +431,9 @@ type VMId = string
 // InternalError defines model for InternalError.
 type InternalError = Error
 
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = Error
+
 // VMInvalidState defines model for VMInvalidState.
 type VMInvalidState = Error
 
@@ -404,6 +444,9 @@ type VMNotFound = Error
 type UploadIsoMultipartBody struct {
 	File openapi_types.File `json:"file"`
 }
+
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = LoginRequest
 
 // CreateNetworkJSONRequestBody defines body for CreateNetwork for application/json ContentType.
 type CreateNetworkJSONRequestBody = NetworkCreate
