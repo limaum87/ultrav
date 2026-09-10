@@ -176,11 +176,12 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
     </disk>`, xmlEscape(isoPath))
 		}
 
-		// VNC console bound to localhost: the web console reaches it through
-		// virDomainOpenGraphicsFD; it is never exposed on the network directly.
+		// VNC console on an auto-generated unix socket (under
+		// /var/lib/libvirt/qemu/domain-*/): the web console dials it directly,
+		// and it is never exposed on the network.
 		graphics := `
-    <graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'>
-      <listen type='address' address='127.0.0.1'/>
+    <graphics type='vnc'>
+      <listen type='socket'/>
     </graphics>
     <video>
       <model type='vga'/>
