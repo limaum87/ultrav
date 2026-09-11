@@ -15,6 +15,7 @@ import {
 } from '../components/ui';
 import { InfoCard, Tabs } from '../components/Tabs';
 import { ConsolePanel } from '../components/ConsolePanel';
+import { LiveCharts, useMetricHistory } from '../components/LiveCharts';
 import { useToast } from '../components/Toast';
 import {
   Play, Power, RotateCcw, SquareTerminal, OctagonX, Trash2,
@@ -158,6 +159,8 @@ export default function VMDetails() {
 /* ---------- tabs ---------- */
 
 function Overview({ vm }: { vm: VirtualMachine }) {
+  // Session-scoped metric history: sampled client-side while the page is open.
+  const samples = useMetricHistory(vm.id);
   const m = vm.metrics;
   const running = vm.state === 'running';
   const cpuPct = m?.cpuPercent ?? null;
@@ -227,10 +230,10 @@ function Overview({ vm }: { vm: VirtualMachine }) {
           icon={<ArrowDownUp size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
         />
       </section>
-      {/* Historical graphs need a time-series endpoint (e.g. GET /vms/{id}/metrics). */}
-      <div className="mini-chart-note">
-        Historical graphs are unavailable — the API exposes current metrics only.
-      </div>
+      {/* The API exposes current metrics only (no time-series endpoint yet),
+          so the charts below are built from samples collected live while this
+          page is open (session scope, in-memory). */}
+      <LiveCharts samples={samples} />
 
       <section className="grid-2">
         <InfoCard title="General Information">
