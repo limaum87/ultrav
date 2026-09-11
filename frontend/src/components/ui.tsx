@@ -64,10 +64,10 @@ export function MetricCard({
 /* ---------- Compact inline progress (table cells) ---------- */
 
 /**
- * Used for per-VM metrics. The current API does not expose per-VM CPU/memory
- * utilization, so pass `unavailable` and the cell renders an explicit `n/a`
- * state instead of a fabricated value. Requires a backend addition such as
- * `VirtualMachine.metrics` { cpuPercent, memoryUsedBytes } to light up.
+ * Used for per-VM metrics. Pass `used` (0-100) from
+ * `VirtualMachine.metrics`; when the API returns null (e.g. a stopped VM, or
+ * a metric the host cannot report) the cell renders an explicit `n/a` state
+ * instead of a fabricated value.
  */
 export function ProgressMetric({
   used,

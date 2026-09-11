@@ -839,10 +839,49 @@ export interface components {
              */
             sizeBytes: number;
             /**
+             * Format: int64
+             * @description Space currently allocated for this disk on the host (the backing volume's allocation, not the guest filesystem usage). Null when the hypervisor cannot report it.
+             * @example 34359738368
+             */
+            usedBytes?: number | null;
+            /**
              * @example virtio
              * @enum {string}
              */
             bus?: "virtio" | "sata" | "scsi";
+        };
+        /** @description Point-in-time resource utilization of a running virtual machine. The whole object is absent while the VM is not running. Individual fields are null when the host cannot report them (e.g. no balloon driver / guest agent, or a first sample with no previous sample to diff against). Values are computed by the hypervisor provider, which is allowed to keep a short-lived sampling cache per VM. */
+        VmMetrics: {
+            /**
+             * Format: float
+             * @description CPU utilization relative to the VM's allocated vCPUs.
+             * @example 12.5
+             */
+            cpuPercent: number | null;
+            /**
+             * Format: int64
+             * @description Guest memory currently in use. Null unless the guest balloon driver or agent reports it.
+             * @example 3221225472
+             */
+            memoryUsedBytes: number | null;
+            /**
+             * Format: int64
+             * @description Inbound network throughput across all interfaces. Null until a second sample is available to compute a rate.
+             * @example 40960
+             */
+            networkRxBytesPerSecond: number | null;
+            /**
+             * Format: int64
+             * @description Outbound network throughput across all interfaces. Null until a second sample is available to compute a rate.
+             * @example 20480
+             */
+            networkTxBytesPerSecond: number | null;
+            /**
+             * Format: date-time
+             * @description When the underlying sample was taken.
+             * @example 2025-09-01T12:00:00Z
+             */
+            sampledAt: string;
         };
         NetworkInterface: {
             /** @example ens3 */
@@ -880,6 +919,7 @@ export interface components {
             ipAddress?: string | null;
             disks: components["schemas"]["Disk"][];
             networkInterfaces: components["schemas"]["NetworkInterface"][];
+            metrics?: components["schemas"]["VmMetrics"];
             /**
              * Format: date-time
              * @example 2025-09-01T12:00:00Z

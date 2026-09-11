@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, unwrap, ApiError, type VirtualMachine } from '../api/client';
-import { formatBytes, formatUptime, usePolling } from '../lib/hooks';
+import { formatBytes, formatRate, formatUptime, usePolling } from '../lib/hooks';
 import {
   ActionMenu,
   ConfirmDialog,
@@ -158,37 +158,78 @@ export default function VMDetails() {
 /* ---------- tabs ---------- */
 
 function Overview({ vm }: { vm: VirtualMachine }) {
+  const m = vm.metrics;
+  const running = vm.state === 'running';
+  const cpuPct = m?.cpuPercent ?? null;
+  const memUsed = m?.memoryUsedBytes ?? null;
+  const rx = m?.networkRxBytesPerSecond ?? null;
+  const tx = m?.networkTxBytesPerSecond ?? null;
+
+  const diskTotal = vm.disks.reduce((s, d) => s + d.sizeBytes, 0);
+  const diskUsed = vm.disks.reduce((s, d) => s + (d.usedBytes ?? 0), 0);
+  const diskReported = vm.disks.some((d) => d.usedBytes != null);
+  const diskPct = diskReported && diskTotal > 0 ? (diskUsed / diskTotal) * 100 : null;
+  const memPct = memUsed != null && vm.memoryBytes > 0 ? (memUsed / vm.memoryBytes) * 100 : null;
+
   return (
     <>
       <section className="metric-grid">
         <MetricCard
           label="CPU Usage"
-          value={<span className="metric-unavailable">n/a</span>}
-          hint={`${vm.vcpus} vCPU allocated`}
+          value={cpuPct != null ? `${cpuPct.toFixed(0)}%` : <span className="metric-unavailable">n/a</span>}
+          used={cpuPct}
+          barTone="blue"
+          hint={running ? `${vm.vcpus} vCPU allocated` : 'VM not running'}
           icon={<Cpu size={24} className="ic ic-electric" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
           label="Memory Usage"
-          value={formatBytes(vm.memoryBytes, 1)}
-          hint="allocated (guest usage not exposed by the API)"
+          value={
+            memUsed != null
+              ? `${formatBytes(memUsed, 1)} / ${formatBytes(vm.memoryBytes, 1)}`
+              : formatBytes(vm.memoryBytes, 1)
+          }
+          used={memPct}
+          barTone="violet"
+          hint={
+            memUsed != null
+              ? `${Math.round(memPct ?? 0)}% of allocated`
+              : 'allocated (guest usage not reported)'
+          }
           icon={<MemoryStick size={24} className="ic ic-violet" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
           label="Disk Usage"
-          value={formatBytes(vm.disks.reduce((s, d) => s + d.sizeBytes, 0), 1)}
-          hint={`${vm.disks.length} disk(s) · capacity (used space not exposed)`}
+          value={
+            diskPct != null
+              ? `${formatBytes(diskUsed, 1)} / ${formatBytes(diskTotal, 1)}`
+              : formatBytes(diskTotal, 1)
+          }
+          used={diskPct}
+          barTone="purple"
+          hint={
+            diskPct != null
+              ? `${Math.round(diskPct)}% allocated · ${vm.disks.length} disk(s)`
+              : `${vm.disks.length} disk(s) · capacity (usage not reported)`
+          }
           icon={<HardDrive size={24} className="ic ic-purple" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
           label="Network"
-          value={<span className="metric-unavailable">n/a</span>}
-          hint="rx/tx throughput not exposed by the API"
+          value={
+            rx != null || tx != null ? (
+              <span className="metric-rate">↓ {formatRate(rx)} · ↑ {formatRate(tx)}</span>
+            ) : (
+              <span className="metric-unavailable">n/a</span>
+            )
+          }
+          hint={running ? 'rx / tx throughput' : 'VM not running'}
           icon={<ArrowDownUp size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
         />
       </section>
-      {/* Historical graphs need a metrics endpoint (e.g. GET /vms/{id}/metrics) */}
+      {/* Historical graphs need a time-series endpoint (e.g. GET /vms/{id}/metrics). */}
       <div className="mini-chart-note">
-        Historical graphs are unavailable — the API does not expose metrics history yet.
+        Historical graphs are unavailable — the API exposes current metrics only.
       </div>
 
       <section className="grid-2">
@@ -201,19 +242,32 @@ function Overview({ vm }: { vm: VirtualMachine }) {
         </InfoCard>
         <InfoCard title="System">
           <KV k="vCPU" v={vm.vcpus} />
-          <KV k="Memory" v={`${formatBytes(vm.memoryBytes, 1)} (allocated)`} />
+          <KV
+            k="Memory"
+            v={memUsed != null ? `${formatBytes(memUsed, 1)} / ${formatBytes(vm.memoryBytes, 1)}` : `${formatBytes(vm.memoryBytes, 1)} (allocated)`}
+          />
           <KV k="Disks" v={vm.disks.length} />
           <KV k="Network Interfaces" v={vm.networkInterfaces.length} />
         </InfoCard>
         <InfoCard title="Network">
           <KV k="Primary IP" v={vm.ipAddress ?? '—'} />
+          <KV k="Inbound" v={formatRate(rx)} />
+          <KV k="Outbound" v={formatRate(tx)} />
           {vm.networkInterfaces.slice(0, 3).map((n) => (
             <KV key={n.name} k={n.name} v={n.ipAddress ?? n.macAddress ?? '—'} />
           ))}
         </InfoCard>
         <InfoCard title="Storage">
           {vm.disks.map((d) => (
-            <KV key={d.name} k={`${d.name} (${d.format})`} v={formatBytes(d.sizeBytes, 1)} />
+            <KV
+              key={d.name}
+              k={`${d.name} (${d.format})`}
+              v={
+                d.usedBytes != null
+                  ? `${formatBytes(d.usedBytes, 1)} / ${formatBytes(d.sizeBytes, 1)}`
+                  : formatBytes(d.sizeBytes, 1)
+              }
+            />
           ))}
           {vm.disks.length === 0 && <div className="cell-sub">No disks attached</div>}
         </InfoCard>
@@ -255,7 +309,13 @@ function Disks({ vm }: { vm: VirtualMachine }) {
               <td className="cell-dim">{d.bus ?? '—'}</td>
               <td>{d.format}</td>
               <td>{formatBytes(d.sizeBytes, 1)}</td>
-              <td><ProgressMetric used={null} label="Disk usage" unavailable unavailableReason="Per-disk usage is not exposed by the API yet" /></td>
+              <td>
+                <ProgressMetric
+                  used={d.usedBytes != null && d.sizeBytes > 0 ? (d.usedBytes / d.sizeBytes) * 100 : null}
+                  label="Disk usage"
+                  unavailableReason="Disk usage is not reported by the hypervisor"
+                />
+              </td>
             </tr>
           ))}
         </tbody>

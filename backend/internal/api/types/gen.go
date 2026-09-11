@@ -157,6 +157,9 @@ type Disk struct {
 	Format    DiskFormat `json:"format"`
 	Name      string     `json:"name"`
 	SizeBytes int64      `json:"sizeBytes"`
+
+	// UsedBytes Space currently allocated for this disk on the host (the backing volume's allocation, not the guest filesystem usage). Null when the hypervisor cannot report it.
+	UsedBytes *int64 `json:"usedBytes"`
 }
 
 // DiskBus defines model for Disk.Bus.
@@ -383,11 +386,14 @@ type VMState string
 
 // VirtualMachine defines model for VirtualMachine.
 type VirtualMachine struct {
-	BootTime          *time.Time         `json:"bootTime"`
-	Disks             []Disk             `json:"disks"`
-	Id                string             `json:"id"`
-	IpAddress         *string            `json:"ipAddress"`
-	MemoryBytes       int64              `json:"memoryBytes"`
+	BootTime    *time.Time `json:"bootTime"`
+	Disks       []Disk     `json:"disks"`
+	Id          string     `json:"id"`
+	IpAddress   *string    `json:"ipAddress"`
+	MemoryBytes int64      `json:"memoryBytes"`
+
+	// Metrics Point-in-time resource utilization of a running virtual machine. The whole object is absent while the VM is not running. Individual fields are null when the host cannot report them (e.g. no balloon driver / guest agent, or a first sample with no previous sample to diff against). Values are computed by the hypervisor provider, which is allowed to keep a short-lived sampling cache per VM.
+	Metrics           *VmMetrics         `json:"metrics,omitempty"`
 	Name              string             `json:"name"`
 	NetworkInterfaces []NetworkInterface `json:"networkInterfaces"`
 	Os                *string            `json:"os,omitempty"`
@@ -420,6 +426,24 @@ type VirtualMachineCreate struct {
 type VirtualMachineList struct {
 	Items []VirtualMachine `json:"items"`
 	Total int              `json:"total"`
+}
+
+// VmMetrics Point-in-time resource utilization of a running virtual machine. The whole object is absent while the VM is not running. Individual fields are null when the host cannot report them (e.g. no balloon driver / guest agent, or a first sample with no previous sample to diff against). Values are computed by the hypervisor provider, which is allowed to keep a short-lived sampling cache per VM.
+type VmMetrics struct {
+	// CpuPercent CPU utilization relative to the VM's allocated vCPUs.
+	CpuPercent *float32 `json:"cpuPercent"`
+
+	// MemoryUsedBytes Guest memory currently in use. Null unless the guest balloon driver or agent reports it.
+	MemoryUsedBytes *int64 `json:"memoryUsedBytes"`
+
+	// NetworkRxBytesPerSecond Inbound network throughput across all interfaces. Null until a second sample is available to compute a rate.
+	NetworkRxBytesPerSecond *int64 `json:"networkRxBytesPerSecond"`
+
+	// NetworkTxBytesPerSecond Outbound network throughput across all interfaces. Null until a second sample is available to compute a rate.
+	NetworkTxBytesPerSecond *int64 `json:"networkTxBytesPerSecond"`
+
+	// SampledAt When the underlying sample was taken.
+	SampledAt time.Time `json:"sampledAt"`
 }
 
 // ResourceID defines model for ResourceID.

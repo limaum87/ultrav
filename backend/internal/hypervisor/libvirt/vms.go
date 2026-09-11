@@ -83,13 +83,21 @@ func (p *Provider) ListVirtualMachines(_ context.Context) ([]types.VirtualMachin
 		}
 		out = make([]types.VirtualMachine, 0, len(doms))
 		for i := range doms {
-			vm, err := domainToModel(&doms[i])
+			vm, err := p.domainToModel(&doms[i])
 			if err != nil {
 				continue // skip unreadable domains rather than failing the list
 			}
 			out = append(out, vm)
 		}
 		sortVMs(out)
+		// Drop sampling state for domains that are no longer running.
+		running := make(map[string]bool, len(out))
+		for i := range out {
+			if out[i].State == types.VMStateRunning {
+				running[out[i].Id] = true
+			}
+		}
+		p.forgetSamples(running)
 		return nil
 	})
 	return out, err
@@ -246,7 +254,7 @@ func (p *Provider) GetVirtualMachine(_ context.Context, id string) (types.Virtua
 		if err != nil {
 			return hypervisor.ErrVMNotFound
 		}
-		vm, err = domainToModel(dom)
+		vm, err = p.domainToModel(dom)
 		return err
 	})
 	return vm, err
@@ -340,10 +348,10 @@ func (p *Provider) ForceStopVirtualMachine(_ context.Context, id string) (types.
 	return p.GetVirtualMachine(context.Background(), id)
 }
 
-// domainToModel converts one libvirt domain into the API model. Disk sizes
-// are resolved best-effort through storage volume lookups; IPs via the QEMU
-// guest agent when available.
-func domainToModel(dom *libvirt.Domain) (types.VirtualMachine, error) {
+// domainToModel converts one libvirt domain into the API model. Disk allocation
+// and memory usage are resolved best-effort; IPs via the QEMU guest agent when
+// available; live utilization via the provider's sampling cache.
+func (p *Provider) domainToModel(dom *libvirt.Domain) (types.VirtualMachine, error) {
 	name, err := dom.GetName()
 	if err != nil {
 		return types.VirtualMachine{}, err
@@ -385,6 +393,15 @@ func domainToModel(dom *libvirt.Domain) (types.VirtualMachine, error) {
 			SizeBytes: 0,
 			Bus:       diskBus(d.Target.Bus),
 		}
+		// Capacity/allocation live on the backing volume, not in the domain
+		// XML. GetBlockInfo returns both without touching the storage pool.
+		if d.Source.File != "" {
+			if info, err := dom.GetBlockInfo(d.Source.File, 0); err == nil && info != nil {
+				disk.SizeBytes = int64(info.Capacity)
+				alloc := int64(info.Allocation)
+				disk.UsedBytes = &alloc
+			}
+		}
 		vm.Disks = append(vm.Disks, disk)
 	}
 	if vm.Disks == nil {
@@ -407,6 +424,7 @@ func domainToModel(dom *libvirt.Domain) (types.VirtualMachine, error) {
 	// when the agent is not installed / not responding.
 	if vm.State == types.VMStateRunning {
 		vm.IpAddress = agentIPAddress(dom, vm.NetworkInterfaces)
+		vm.Metrics = p.sampleMetrics(dom, &dx, name, memBytes)
 	}
 	return vm, nil
 }

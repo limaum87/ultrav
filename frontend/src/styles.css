@@ -879,6 +879,7 @@ tr.row-busy { opacity: 0.55; }
   color: var(--text-faint);
 }
 .metric-unavailable { color: var(--text-faint); font-size: 16px; }
+.metric-rate { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mini-chart-note {
   font-size: 12px;
   color: var(--text-faint);

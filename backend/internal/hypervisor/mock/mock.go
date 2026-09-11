@@ -360,6 +360,14 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 			Bus:       ptr(types.DiskBusVirtio),
 		}}
 	}
+	// Host-side allocation per disk is stable across polls (a property of the
+	// disk, not a live gauge), so derive it deterministically from the name.
+	m.Disks = append([]types.Disk(nil), m.Disks...)
+	for i := range m.Disks {
+		d := &m.Disks[i]
+		used := int64(float64(d.SizeBytes) * (0.35 + stableFraction(vm.spec.id+d.Name)))
+		d.UsedBytes = &used
+	}
 	m.NetworkInterfaces = []types.NetworkInterface{{
 		Name:       "ens3",
 		Model:      types.NetworkInterfaceModelVirtio,
@@ -375,7 +383,58 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		m.IpAddress = &vm.ipAddress
 		m.NetworkInterfaces[0].IpAddress = &vm.ipAddress
 	}
+	if vm.state == types.VMStateRunning {
+		m.Metrics = p.metricsFor(vm)
+	}
 	return m
+}
+
+// metricsFor fabricates a plausible, live-feeling utilization snapshot for a
+// running VM. Gauges (CPU%, network) fluctuate a little on every poll; memory
+// use tracks a stable fraction of the allocated amount.
+func (p *Provider) metricsFor(vm *vmState) *types.VmMetrics {
+	base := 6 + stableFraction(vm.spec.id+"cpu")*100 // ~6%..46%
+	cpu := float32(clampFloat(base+p.jitter(25), 1, 99))
+
+	memUsed := int64(float64(vm.spec.memory) * (0.45 + stableFraction(vm.spec.id+"mem")))
+
+	rxBase := 20_000 + stableFraction(vm.spec.id+"rx")*400_000
+	txBase := 10_000 + stableFraction(vm.spec.id+"tx")*200_000
+	rx := int64(math.Max(0, rxBase+p.jitter(rxBase*0.5)))
+	tx := int64(math.Max(0, txBase+p.jitter(txBase*0.5)))
+
+	m := &types.VmMetrics{
+		CpuPercent:              &cpu,
+		MemoryUsedBytes:         &memUsed,
+		NetworkRxBytesPerSecond: &rx,
+		NetworkTxBytesPerSecond: &tx,
+		SampledAt:               time.Now(),
+	}
+	if memUsed > vm.spec.memory {
+		m.MemoryUsedBytes = &vm.spec.memory
+	}
+	return m
+}
+
+// stableFraction maps a string to a deterministic value in [0, 0.4). Unlike
+// p.rng it does not change between polls, so derived values stay put.
+func stableFraction(seed string) float64 {
+	h := uint32(2166136261)
+	for i := 0; i < len(seed); i++ {
+		h ^= uint32(seed[i])
+		h *= 16777619
+	}
+	return float64(h%41) / 100.0
+}
+
+func clampFloat(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 // jitter returns a small value in [-f, f) based on a slow sine of the current

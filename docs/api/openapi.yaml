@@ -949,7 +949,66 @@ components:
         name: { type: string, example: vda }
         format: { type: string, enum: [qcow2, raw], example: qcow2 }
         sizeBytes: { type: integer, format: int64, example: 128849018880 }
+        usedBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: >
+            Space currently allocated for this disk on the host (the backing
+            volume's allocation, not the guest filesystem usage). Null when the
+            hypervisor cannot report it.
+          example: 34359738368
         bus: { type: string, enum: [virtio, sata, scsi], example: virtio }
+
+    VmMetrics:
+      type: object
+      description: >
+        Point-in-time resource utilization of a running virtual machine. The
+        whole object is absent while the VM is not running. Individual fields
+        are null when the host cannot report them (e.g. no balloon driver /
+        guest agent, or a first sample with no previous sample to diff
+        against). Values are computed by the hypervisor provider, which is
+        allowed to keep a short-lived sampling cache per VM.
+      required:
+        [cpuPercent, memoryUsedBytes, networkRxBytesPerSecond, networkTxBytesPerSecond, sampledAt]
+      properties:
+        cpuPercent:
+          type: number
+          format: float
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: CPU utilization relative to the VM's allocated vCPUs.
+          example: 12.5
+        memoryUsedBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: >
+            Guest memory currently in use. Null unless the guest balloon
+            driver or agent reports it.
+          example: 3221225472
+        networkRxBytesPerSecond:
+          type: integer
+          format: int64
+          nullable: true
+          description: >
+            Inbound network throughput across all interfaces. Null until a
+            second sample is available to compute a rate.
+          example: 40960
+        networkTxBytesPerSecond:
+          type: integer
+          format: int64
+          nullable: true
+          description: >
+            Outbound network throughput across all interfaces. Null until a
+            second sample is available to compute a rate.
+          example: 20480
+        sampledAt:
+          type: string
+          format: date-time
+          description: When the underlying sample was taken.
+          example: '2025-09-01T12:00:00Z'
 
     NetworkInterface:
       type: object
@@ -979,6 +1038,7 @@ components:
         networkInterfaces:
           type: array
           items: { $ref: '#/components/schemas/NetworkInterface' }
+        metrics: { $ref: '#/components/schemas/VmMetrics' }
         bootTime:
           type: string
           format: date-time

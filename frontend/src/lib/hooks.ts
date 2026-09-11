@@ -36,6 +36,12 @@ export function formatBytes(bytes: number, decimals = 1): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${units[i]}`;
 }
 
+/** Formats a bytes-per-second throughput value, e.g. "1.2 MB/s". */
+export function formatRate(bytesPerSecond: number | null | undefined, decimals = 1): string {
+  if (bytesPerSecond == null) return '—';
+  return `${formatBytes(bytesPerSecond, decimals)}/s`;
+}
+
 export function formatUptime(seconds: number | null | undefined): string {
   if (seconds == null) return '—';
   const d = Math.floor(seconds / 86400);

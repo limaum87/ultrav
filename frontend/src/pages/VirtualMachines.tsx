@@ -321,13 +321,16 @@ export default function VirtualMachines() {
                   </td>
                   <td>{vm.vcpus}</td>
                   <td>
-                    {/* TODO(backend): per-VM cpuPercent not exposed by the API */}
-                    <ProgressMetric used={null} label="CPU" unavailable unavailableReason="Per-VM CPU utilization is not exposed by the API yet" />
+                    <ProgressMetric used={vm.metrics?.cpuPercent ?? null} label="CPU" />
                   </td>
                   <td>
                     <div className="cell-stack">
-                      <span>{formatBytes(vm.memoryBytes, 1)}</span>
-                      <span className="cell-sub">allocated</span>
+                      <span>{formatBytes(vm.metrics?.memoryUsedBytes ?? vm.memoryBytes, 1)}</span>
+                      <span className="cell-sub">
+                        {vm.metrics?.memoryUsedBytes != null
+                          ? `of ${formatBytes(vm.memoryBytes, 1)}`
+                          : 'allocated'}
+                      </span>
                     </div>
                   </td>
                   <td className="mono">{vm.ipAddress ?? <span className="cell-unavailable">n/a</span>}</td>

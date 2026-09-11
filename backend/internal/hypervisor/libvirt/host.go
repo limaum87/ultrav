@@ -24,13 +24,18 @@ type Provider struct {
 
 	mu   sync.Mutex
 	conn *libvirt.Connect
+
+	// metricsMu guards samples: the last raw counters read per domain, used to
+	// derive CPU%/throughput rates across polls. See metrics.go.
+	metricsMu sync.Mutex
+	samples   map[string]*vmSample
 }
 
 // New creates a provider for the given libvirt URI (e.g. qemu:///system).
 // isoDir backs the ISO library used for install-media attachments.
 // The connection is established lazily and re-established on failure.
 func New(uri, isoDir string) *Provider {
-	return &Provider{uri: uri, isoDir: isoDir}
+	return &Provider{uri: uri, isoDir: isoDir, samples: make(map[string]*vmSample)}
 }
 
 // Ready reports whether a connection to the daemon can be established.
