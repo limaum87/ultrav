@@ -5,6 +5,9 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 COPY frontend/package.json ./
+# Patches must be present before npm install: patch-package applies them from
+# the postinstall hook (e.g. the noVNC 16bpp default that unbreaks QEMU VNC).
+COPY frontend/patches ./patches
 RUN npm install --include=dev --no-audit --no-fund
 COPY frontend/ .
 COPY docs/api/openapi.yaml /contract/openapi.yaml
