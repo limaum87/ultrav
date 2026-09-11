@@ -52,6 +52,12 @@ func (s *Server) routes() {
 	// Auth (login is public; /auth/me is protected)
 	mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
 	mux.HandleFunc("GET /api/v1/auth/me", s.handleGetCurrentUser)
+	mux.HandleFunc("PUT /api/v1/auth/password", s.handleChangeOwnPassword)
+	// User management (admin only)
+	mux.HandleFunc("GET /api/v1/users", s.requireAdmin(s.handleListUsers))
+	mux.HandleFunc("POST /api/v1/users", s.requireAdmin(s.handleCreateUser))
+	mux.HandleFunc("DELETE /api/v1/users/{id}", s.requireAdmin(s.handleDeleteUser))
+	mux.HandleFunc("PUT /api/v1/users/{id}/password", s.requireAdmin(s.handleResetUserPassword))
 	// Health
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/ready", s.handleReadiness)

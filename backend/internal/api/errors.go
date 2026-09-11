@@ -26,6 +26,10 @@ const (
 	CodeIsoAlreadyExists     = "ISO_ALREADY_EXISTS"
 	CodeUnauthorized         = "UNAUTHORIZED"
 	CodeInvalidCredentials   = "INVALID_CREDENTIALS"
+	CodeForbidden            = "FORBIDDEN"
+	CodeUserNotFound         = "USER_NOT_FOUND"
+	CodeUserAlreadyExists    = "USER_ALREADY_EXISTS"
+	CodeLastAdmin            = "LAST_ADMIN"
 	CodeInternalError        = "INTERNAL_ERROR"
 	CodeConsoleUnavailable  = "CONSOLE_UNAVAILABLE"
 )
@@ -47,6 +51,10 @@ var errorStatus = map[string]int{
 	CodeIsoAlreadyExists:     http.StatusConflict,
 	CodeUnauthorized:         http.StatusUnauthorized,
 	CodeInvalidCredentials:   http.StatusUnauthorized,
+	CodeForbidden:            http.StatusForbidden,
+	CodeUserNotFound:         http.StatusNotFound,
+	CodeUserAlreadyExists:    http.StatusConflict,
+	CodeLastAdmin:            http.StatusConflict,
 	CodeInternalError:        http.StatusInternalServerError,
 	CodeConsoleUnavailable:  http.StatusConflict,
 }

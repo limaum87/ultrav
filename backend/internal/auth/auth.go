@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -127,6 +128,9 @@ func (s *Service) CreateUser(username, password, role string) (*User, error) {
 	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)`,
 		username, string(hash), role)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return nil, ErrUserExists
+		}
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
@@ -214,4 +218,88 @@ func (s *Service) byUsername(username string) (*User, error) {
 		Scan(&u.ID, &u.Username, &u.Role, &ts)
 	u.CreatedAt = time.Unix(ts, 0).UTC()
 	return u, err
+}
+
+// ErrUserExists and ErrLastAdmin are returned by the user-management methods.
+var (
+	ErrUserExists = errors.New("user already exists")
+	ErrLastAdmin  = errors.New("cannot remove or demote the last admin")
+)
+
+// ListUsers returns all users ordered by id.
+func (s *Service) ListUsers() ([]User, error) {
+	rows, err := s.db.Query(`SELECT id, username, role, created_at FROM users ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []User
+	for rows.Next() {
+		var u User
+		var ts int64
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &ts); err != nil {
+			return nil, err
+		}
+		u.CreatedAt = time.Unix(ts, 0).UTC()
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+// DeleteUser removes a user by id. Guards: the caller cannot delete itself,
+// and the last remaining admin cannot be deleted.
+func (s *Service) DeleteUser(callerID, id int64) error {
+	if callerID == id {
+		return ErrLastAdmin
+	}
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin' AND id = ?`, id).
+		Scan(&count); err != nil {
+		return err
+	}
+	if count == 1 {
+		var admins int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&admins); err != nil {
+			return err
+		}
+		if admins <= 1 {
+			return ErrLastAdmin
+		}
+	}
+	res, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// UpdatePassword replaces a user's password hash (admin reset).
+func (s *Service) UpdatePassword(id int64, password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	res, err := s.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, string(hash), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ChangeOwnPassword validates the current password before replacing it.
+func (s *Service) ChangeOwnPassword(id int64, current, next string) error {
+	var hash string
+	if err := s.db.QueryRow(`SELECT password_hash FROM users WHERE id = ?`, id).Scan(&hash); err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(current)) != nil {
+		return ErrInvalidCredentials
+	}
+	return s.UpdatePassword(id, next)
 }

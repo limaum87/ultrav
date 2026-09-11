@@ -13,6 +13,12 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CreateUserRequestRole.
+const (
+	CreateUserRequestRoleAdmin  CreateUserRequestRole = "admin"
+	CreateUserRequestRoleViewer CreateUserRequestRole = "viewer"
+)
+
 // Defines values for DiskBus.
 const (
 	DiskBusSata   DiskBus = "sata"
@@ -102,8 +108,8 @@ const (
 
 // Defines values for UserRole.
 const (
-	Admin  UserRole = "admin"
-	Viewer UserRole = "viewer"
+	UserRoleAdmin  UserRole = "admin"
+	UserRoleViewer UserRole = "viewer"
 )
 
 // Defines values for VMState.
@@ -143,6 +149,12 @@ type CapabilitiesVirtualization struct {
 	Uefi bool `json:"uefi"`
 }
 
+// ChangePasswordRequest defines model for ChangePasswordRequest.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
 // Cpu defines model for Cpu.
 type Cpu struct {
 	Cores        int      `json:"cores"`
@@ -150,6 +162,16 @@ type Cpu struct {
 	Threads      int      `json:"threads"`
 	UsagePercent *float32 `json:"usagePercent,omitempty"`
 }
+
+// CreateUserRequest defines model for CreateUserRequest.
+type CreateUserRequest struct {
+	Password string                `json:"password"`
+	Role     CreateUserRequestRole `json:"role"`
+	Username string                `json:"username"`
+}
+
+// CreateUserRequestRole defines model for CreateUserRequest.Role.
+type CreateUserRequestRole string
 
 // Disk defines model for Disk.
 type Disk struct {
@@ -367,6 +389,11 @@ type StoragePoolList struct {
 	Total int           `json:"total"`
 }
 
+// UpdatePasswordRequest defines model for UpdatePasswordRequest.
+type UpdatePasswordRequest struct {
+	Password string `json:"password"`
+}
+
 // User defines model for User.
 type User struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -377,6 +404,12 @@ type User struct {
 
 // UserRole defines model for User.Role.
 type UserRole string
+
+// UserList defines model for UserList.
+type UserList struct {
+	Items []User `json:"items"`
+	Total int    `json:"total"`
+}
 
 // VMState - running: powered on and operational
 // - stopped: powered off
@@ -449,8 +482,14 @@ type VmMetrics struct {
 // ResourceID defines model for ResourceID.
 type ResourceID = string
 
+// UserId defines model for UserId.
+type UserId = int
+
 // VMId defines model for VMId.
 type VMId = string
+
+// Forbidden defines model for Forbidden.
+type Forbidden = Error
 
 // InternalError defines model for InternalError.
 type InternalError = Error
@@ -464,6 +503,9 @@ type VMInvalidState = Error
 // VMNotFound defines model for VMNotFound.
 type VMNotFound = Error
 
+// ValidationError defines model for ValidationError.
+type ValidationError = Error
+
 // UploadIsoMultipartBody defines parameters for UploadIso.
 type UploadIsoMultipartBody struct {
 	File openapi_types.File `json:"file"`
@@ -471,6 +513,9 @@ type UploadIsoMultipartBody struct {
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
+
+// ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
+type ChangeOwnPasswordJSONRequestBody = ChangePasswordRequest
 
 // CreateNetworkJSONRequestBody defines body for CreateNetwork for application/json ContentType.
 type CreateNetworkJSONRequestBody = NetworkCreate
@@ -480,6 +525,12 @@ type UploadIsoMultipartRequestBody UploadIsoMultipartBody
 
 // CreateStoragePoolJSONRequestBody defines body for CreateStoragePool for application/json ContentType.
 type CreateStoragePoolJSONRequestBody = StoragePoolCreate
+
+// CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
+type CreateUserJSONRequestBody = CreateUserRequest
+
+// ResetUserPasswordJSONRequestBody defines body for ResetUserPassword for application/json ContentType.
+type ResetUserPasswordJSONRequestBody = UpdatePasswordRequest
 
 // CreateVirtualMachineJSONRequestBody defines body for CreateVirtualMachine for application/json ContentType.
 type CreateVirtualMachineJSONRequestBody = VirtualMachineCreate

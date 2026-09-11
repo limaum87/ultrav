@@ -36,7 +36,7 @@ const nav = [
   { to: '/network', label: 'Network', icon: navIcon(Network), end: false },
   { to: '/backups', label: 'Backups', icon: navIcon(DatabaseBackup), end: false, soon: true },
   { to: '/tasks', label: 'Tasks', icon: navIcon(ListChecks), end: false, soon: true },
-  { to: '/settings', label: 'Settings', icon: navIcon(Settings), end: false, soon: true },
+  { to: '/settings', label: 'Settings', icon: navIcon(Settings), end: false },
 ];
 
 /* ---------- host status card (bottom of sidebar) ---------- */

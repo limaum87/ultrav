@@ -1102,3 +1102,12 @@ tr.row-busy { opacity: 0.55; }
   text-align: left;
 }
 .user-dropdown-item:hover { background: var(--bg-elev2); color: var(--text); }
+
+/* ---------- settings / user management ---------- */
+.ic-bg-red { background: rgba(229, 72, 77, 0.13); }
+.ic-red { color: #e5484d; }
+.alert.success { background: var(--ok-soft, rgba(52, 211, 153, 0.12)); border: 1px solid #34d399; color: #34d399; }
+.btn-danger-ghost:not(:disabled):hover { border-color: var(--danger); background: var(--danger-soft, rgba(229, 72, 77, 0.1)); color: var(--danger); }
+.btn-danger-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+.actions-md-btn { padding: 6px 10px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; }
+.th-actions { text-align: right; }

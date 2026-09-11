@@ -26,6 +26,8 @@ servers:
 tags:
   - name: Auth
     description: Authentication (JWT bearer)
+  - name: Users
+    description: Local user management (admin only)
   - name: Host
     description: Host status and capabilities
   - name: Virtual Machines
@@ -79,6 +81,113 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/password:
+    put:
+      operationId: changeOwnPassword
+      tags: [Auth]
+      summary: Change the authenticated user's own password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Password changed }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [Users]
+      summary: List local users
+      description: Requires the `admin` role.
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createUser
+      tags: [Users]
+      summary: Create a local user
+      description: Requires the `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+      responses:
+        '201':
+          description: Created user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Username already exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: { code: USER_ALREADY_EXISTS, message: A user with this username already exists, requestId: req_x } }
+
+  /users/{id}:
+    delete:
+      operationId: deleteUser
+      tags: [Users]
+      summary: Delete a local user
+      description: >
+        Requires the `admin` role. The caller cannot delete itself and the
+        last remaining admin cannot be deleted.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204': { description: User deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Cannot delete self or the last admin
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: { code: LAST_ADMIN, message: Cannot delete the last admin user, requestId: req_x } }
+
+  /users/{id}/password:
+    put:
+      operationId: resetUserPassword
+      tags: [Users]
+      summary: Reset a user's password (admin)
+      description: Requires the `admin` role.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePasswordRequest' }
+      responses:
+        '204': { description: Password updated }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /host:
     get:
@@ -623,6 +732,13 @@ components:
       description: Resource identifier (libvirt name).
       schema: { type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$', example: default }
 
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: Numeric user identifier.
+      schema: { type: integer, minimum: 1, example: 2 }
+
   responses:
     VMNotFound:
       description: Virtual machine not found
@@ -652,6 +768,19 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example:
             error: { code: UNAUTHORIZED, message: Authentication required, requestId: req_01HV3M9Z2N }
+
+    Forbidden:
+      description: Admin role required
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: FORBIDDEN, message: Admin role required, requestId: req_x } }
+    ValidationError:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: VALIDATION_ERROR, message: username and password are required, requestId: req_x } }
 
   securitySchemes:
     bearerAuth:
@@ -687,6 +816,36 @@ components:
           type: string
           format: date-time
           example: '2025-09-01T12:00:00Z'
+    UserList:
+      type: object
+      required: [total, items]
+      properties:
+        total: { type: integer, example: 2 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+
+    CreateUserRequest:
+      type: object
+      required: [username, password, role]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 64, example: alice }
+        password: { type: string, format: password, minLength: 8, example: secret }
+        role: { type: string, enum: [admin, viewer], example: viewer }
+
+    UpdatePasswordRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, format: password, minLength: 8, example: new-secret }
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password, example: secret }
+        newPassword: { type: string, format: password, minLength: 8, example: new-secret }
+
     Error:
       type: object
       required: [error]

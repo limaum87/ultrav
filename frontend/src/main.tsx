@@ -10,6 +10,7 @@ import VMDetails from './pages/VMDetails';
 import ComingSoon from './pages/ComingSoon';
 import Storage from './pages/Storage';
 import NetworkPage from './pages/Network';
+import Settings from './pages/Settings';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -26,7 +27,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/backups" element={<ComingSoon title="Backups" />} />
             <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
-            <Route path="/settings" element={<ComingSoon title="Settings" />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
