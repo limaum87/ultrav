@@ -72,6 +72,9 @@ func (p *Provider) sampleMetrics(dom *libvirt.Domain, dx *domainXML, name string
 // memoryUsedBytes reports guest memory in use. libvirt exposes an explicit
 // "unused" figure when the balloon driver is present; otherwise we fall back to
 // the host-side RSS of the QEMU process. Returns nil when neither is available.
+//
+// virDomainMemoryStats reports its values in kibibytes, so they are converted to
+// bytes before being combined with the byte-denominated allocation.
 func memoryUsedBytes(dom *libvirt.Domain, memTotal int64) *int64 {
 	stats, err := dom.MemoryStats(uint32(libvirt.DOMAIN_MEMORY_STAT_NR), 0)
 	if err != nil {
@@ -82,9 +85,9 @@ func memoryUsedBytes(dom *libvirt.Domain, memTotal int64) *int64 {
 	for _, s := range stats {
 		switch libvirt.DomainMemoryStatTags(s.Tag) {
 		case libvirt.DOMAIN_MEMORY_STAT_UNUSED:
-			unused, haveUnused = int64(s.Val), true
+			unused, haveUnused = int64(s.Val)*1024, true
 		case libvirt.DOMAIN_MEMORY_STAT_RSS:
-			rss, haveRSS = int64(s.Val), true
+			rss, haveRSS = int64(s.Val)*1024, true
 		}
 	}
 	if haveUnused && memTotal > 0 {

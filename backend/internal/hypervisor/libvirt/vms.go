@@ -20,11 +20,11 @@ type domainXML struct {
 	Name   string `xml:"name"`
 	OS     string `xml:"os>type"`
 	Memory struct {
-		Value int64  `xml:"chardata"`
+		Value int64  `xml:",chardata"`
 		Unit  string `xml:"unit,attr"`
 	} `xml:"memory"`
 	CurrentMemory struct {
-		Value int64  `xml:"chardata"`
+		Value int64  `xml:",chardata"`
 		Unit  string `xml:"unit,attr"`
 	} `xml:"currentMemory"`
 	VCPU  int          `xml:"vcpu"`
