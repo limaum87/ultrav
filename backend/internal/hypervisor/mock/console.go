@@ -79,25 +79,42 @@ func serveRFB(c net.Conn, name string) {
 	_ = c.SetDeadline(time.Time{})
 
 	// --- frame loop: answer update requests, skip everything else ---
-	row := make([]byte, w*4)
-	for i := 0; i < w; i++ {
-		row[i*4] = 0x18
-		row[i*4+1] = 0x1a
-		row[i*4+2] = 0x22
-		row[i*4+3] = 0xff
+	// The client may switch our pixel format (SetPixelFormat); re-render
+	// pixels in whatever format it asked for (16bpp matters for noVNC,
+	// which defaults to it — see the rfb.js patch).
+	bpp := 32
+	var rmax, gmax, bmax uint16 = 255, 255, 255
+	var rshift, gshift, bshift uint8 = 16, 8, 0
+	frame := make([]byte, 0, 16+h*w*4)
+	buildFrame := func() {
+		rgb := func(r, g, b int) uint64 {
+			// quantize to the client's maxima and pack by its shifts
+			rq := uint64(r) * uint64(rmax) / 255
+			gq := uint64(g) * uint64(gmax) / 255
+			bq := uint64(b) * uint64(bmax) / 255
+			return rq<<rshift | gq<<gshift | bq<<bshift
+		}
+		bytesPP := bpp / 8
+		frame = frame[:0]
+		frame = append(frame, 0)                        // FramebufferUpdate
+		frame = append(frame, 0)                        // padding
+		frame = binary.BigEndian.AppendUint16(frame, 1) // one rectangle
+		frame = binary.BigEndian.AppendUint16(frame, 0) // x
+		frame = binary.BigEndian.AppendUint16(frame, 0) // y
+		frame = binary.BigEndian.AppendUint16(frame, w)
+		frame = binary.BigEndian.AppendUint16(frame, h)
+		frame = binary.BigEndian.AppendUint32(frame, 0) // raw encoding
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				// subtle gradient so the console looks alive
+				c := rgb(0x18+x*0x20/w, 0x1a+y*0x30/h, 0x52)
+				for i := bytesPP - 1; i >= 0; i-- {
+					frame = append(frame, byte(c>>(8*i)))
+				}
+			}
+		}
 	}
-	frame := make([]byte, 0, 16+h*len(row))
-	frame = append(frame, 0) // FramebufferUpdate
-	frame = append(frame, 0) // padding
-	frame = binary.BigEndian.AppendUint16(frame, 1) // one rectangle
-	frame = binary.BigEndian.AppendUint16(frame, 0) // x
-	frame = binary.BigEndian.AppendUint16(frame, 0) // y
-	frame = binary.BigEndian.AppendUint16(frame, w)
-	frame = binary.BigEndian.AppendUint16(frame, h)
-	frame = binary.BigEndian.AppendUint32(frame, 0) // raw encoding
-	for y := 0; y < h; y++ {
-		frame = append(frame, row...)
-	}
+	buildFrame()
 
 	msg := make([]byte, 64)
 	for {
@@ -121,10 +138,22 @@ func serveRFB(c net.Conn, name string) {
 			if _, err := io.CopyN(io.Discard, c, int64(n)*4); err != nil {
 				return
 			}
-		case 0: // SetPixelFormat
-			if _, err := io.ReadFull(c, msg[:19]); err != nil {
+		case 0: // SetPixelFormat: honor bpp/maxima/shifts
+			var msg19 [19]byte
+			if _, err := io.ReadFull(c, msg19[:]); err != nil {
 				return
 			}
+			bpp = int(msg19[3])
+			if bpp != 8 && bpp != 16 && bpp != 32 {
+				bpp = 32
+			}
+			rmax = binary.BigEndian.Uint16(msg19[6:8])
+			gmax = binary.BigEndian.Uint16(msg19[8:10])
+			bmax = binary.BigEndian.Uint16(msg19[10:12])
+			rshift = msg19[12]
+			gshift = msg19[13]
+			bshift = msg19[14]
+			buildFrame()
 		case 4, 5: // KeyEvent, PointerEvent — ignore
 			size := map[byte]int{4: 7, 5: 5}[msg[0]]
 			if _, err := io.ReadFull(c, msg[:size]); err != nil {

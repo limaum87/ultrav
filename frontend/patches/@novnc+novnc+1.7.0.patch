@@ -1,0 +1,17 @@
+diff --git a/node_modules/@novnc/novnc/core/rfb.js b/node_modules/@novnc/novnc/core/rfb.js
+index 80011e4..981ee31 100644
+--- a/node_modules/@novnc/novnc/core/rfb.js
++++ b/node_modules/@novnc/novnc/core/rfb.js
+@@ -2210,7 +2210,11 @@ export default class RFB extends EventTargetMixin {
+ 
+         if (!this._viewOnly) { this._keyboard.grab(); }
+ 
+-        this._fbDepth = 24;
++        // Ultrav patch: default to 16bpp. QEMU <= 4.2 only (re)sends the base
++        // framebuffer when the client's SetPixelFormat actually differs from the
++        // server's (graphic_hw_invalidate is a no-op for identical formats), which
++        // left new noVNC clients with a black screen. 16bpp forces the resync.
++        this._fbDepth = 16;
+ 
+         if (this._fbName === "Intel(r) AMT KVM") {
+             Log.Warn("Intel AMT KVM only supports 8/16 bit depths. Using low color mode.");
