@@ -18,4 +18,10 @@ RUN npx openapi-typescript /contract/openapi.yaml -o src/api/schema.d.ts && npm 
 FROM nginx:1.27-alpine
 COPY --from=build /src/dist /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+# noVNC requires a secure context: serve TLS with a self-signed certificate
+# generated at build time (single-host internal deployment).
+RUN apk add --no-cache openssl && mkdir -p /etc/nginx/certs && \
+    openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+      -keyout /etc/nginx/certs/tls.key -out /etc/nginx/certs/tls.crt \
+      -subj "/CN=ultrav" -addext "subjectAltName=DNS:ultrav,IP:192.168.8.69"
+EXPOSE 80 443

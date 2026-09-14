@@ -31,7 +31,7 @@ services:
       context: ..
       dockerfile: frontend/Dockerfile
     ports:
-      - "8275:80"   # UI + /api + /openapi.json + /docs (single entry point)
+      - "8275:443"  # UI (HTTPS, noVNC exige contexto seguro) + /api + /docs
     depends_on:
       backend:
         condition: service_healthy
