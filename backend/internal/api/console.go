@@ -27,6 +27,9 @@ func (s *Server) handleVMConsole(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		// noVNC requests the "binary" subprotocol; browsers abort the
+		// handshake if the server does not echo a selected subprotocol back.
+		Subprotocols: []string{"binary"},
 		// Same-origin only: the UI is served from this host, and phase-1
 		// has no cross-origin console consumers.
 		OriginPatterns: nil,
