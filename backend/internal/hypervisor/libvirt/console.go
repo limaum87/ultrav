@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -101,49 +100,6 @@ func (p *Provider) OpenVMConsole(_ context.Context, id string) (net.Conn, error)
 // fileConn adapts an *os.File (e.g. a socket fd from OpenGraphicsFD) to
 // net.Conn. Addresses are empty; deadlines and reads/writes pass through.
 type fileConn struct{ f *os.File }
-
-// ScreenDumpVM captures the VM's current screen via the QEMU monitor
-// (screendump) and returns the PPM (P6) image bytes. The dump file is written
-// next to the VM's VNC unix socket (the only path QEMU's AppArmor/sandbox
-// profile reliably allows) and removed after reading. Best effort: returns an
-// error when the console is not unix-socket-backed or the monitor command
-// fails — callers must treat this as optional.
-func (p *Provider) ScreenDumpVM(_ context.Context, id string) ([]byte, error) {
-	c, err := p.connect()
-	if err != nil {
-		return nil, err
-	}
-	dom, err := c.LookupDomainByName(id)
-	if err != nil {
-		return nil, hypervisor.ErrVMNotFound
-	}
-	sockPath, err := vncSocketPath(dom)
-	if err != nil || sockPath == "" {
-		if err == nil {
-			err = fmt.Errorf("no unix socket for %s console", id)
-		}
-		return nil, err
-	}
-	dumpPath := filepath.Join(filepath.Dir(sockPath), fmt.Sprintf("ultrav-bootstrap-%d.ppm", time.Now().UnixNano()))
-	defer os.Remove(dumpPath)
-
-	if _, err := dom.QemuMonitorCommand(fmt.Sprintf("screendump %s", dumpPath), libvirt.DOMAIN_QEMU_MONITOR_COMMAND_HMP); err != nil {
-		return nil, fmt.Errorf("screendump failed: %w", err)
-	}
-	// screendump is asynchronous in some QEMU versions: poll briefly.
-	var data []byte
-	for i := 0; i < 20; i++ {
-		data, err = os.ReadFile(dumpPath)
-		if err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("screendump file not produced: %w", err)
-	}
-	return data, nil
-}
 
 func (c fileConn) Read(b []byte) (int, error)         { return c.f.Read(b) }
 func (c fileConn) Write(b []byte) (int, error)        { return c.f.Write(b) }
