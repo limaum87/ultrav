@@ -51,6 +51,10 @@ type domainNIC struct {
 	MAC  struct {
 		Address string `xml:"address,attr"`
 	} `xml:"mac"`
+	Source struct {
+		Network string `xml:"network,attr"`
+		Bridge  string `xml:"bridge,attr"`
+	} `xml:"source"`
 	Target struct {
 		Dev string `xml:"dev,attr"`
 	} `xml:"target"`
@@ -417,6 +421,12 @@ func (p *Provider) domainToModel(dom *libvirt.Domain) (types.VirtualMachine, err
 			Name:       n.Target.Dev,
 			Model:      nicModel(n.Type),
 			MacAddress: strPtr(n.MAC.Address),
+		}
+		switch {
+		case n.Source.Network != "":
+			nic.Network = strPtr(n.Source.Network)
+		case n.Source.Bridge != "":
+			nic.Network = strPtr(n.Source.Bridge)
 		}
 		vm.NetworkInterfaces = append(vm.NetworkInterfaces, nic)
 	}
