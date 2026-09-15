@@ -60,6 +60,27 @@ ULTRAV_PORT=8275 ./ultrav
 
 The libvirt provider uses the `libvirt_dlopen` build tag: `libvirt.so` is loaded at runtime, so **the same binary** runs in mock mode or against real libvirt.
 
+## 🪟 Installing Windows guests (performance profiles)
+
+VMs are created with a per-OS performance profile. For **Windows**, pick the OS
+type in the creation wizard and attach a **VirtIO drivers ISO** (stable
+virtio-win from
+[fedorapeople](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/);
+upload it in Storage → ISO Library). Without it the installer cannot see the
+virtio-scsi disk.
+
+In the Windows installer:
+
+1. When no disk shows up, click **Load driver** and browse the second CD-ROM
+   (`virtio-win-…`): install `vioscsi` (storage) and `NetKVM` (network).
+2. Proceed with the install normally.
+
+After Windows is up, run `virtio-win-guest-tools.exe` from the same ISO — it
+installs all drivers plus the QEMU guest agent, so UltraV can report the VM's
+IP. Windows VMs get Hyper-V enlightenments, `localtime` clock, and the same
+virtio-scsi/vhost tuning as Linux VMs (see the VM's *Performance profile*
+section in the UI for what the host actually applied).
+
 ## 🧑‍💻 Local development (no Docker)
 
 ```bash

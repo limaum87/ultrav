@@ -30,9 +30,11 @@
 - [x] Networks: leitura + start/stop (`listNetworks`, `getNetwork`, `startNetwork`, `stopNetwork`)
 - [ ] Instalação/target: Ubuntu Server, Debian
 - [ ] `createVirtualMachine` (assíncrono → Job System v1)
+- [x] Perfis de performance por SO na criação (`osType`: linux/windows/other; virtio-scsi + iothread, Hyper-V enlightenments com feature detection, canal do guest agent, ISO de drivers VirtIO para Windows)
 - [ ] Snapshots
 - [ ] Cloud-init
 - [ ] Templates e clone
+- [ ] Aplicar perfil de performance em VM existente (PATCH /vms/{id}/performance-profile) — exige VM parada e redefinição do domínio
 - [x] Console web (noVNC/WebSocket) — `GET /vms/{id}/console` (WS → VNC via OpenGraphicsFD), noVNC na UI, mock fala RFB
 - [ ] Validação em host KVM real
 
