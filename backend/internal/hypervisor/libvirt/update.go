@@ -23,6 +23,8 @@ import (
 //   - isoId: a filename attaches (or swaps) the CD-ROM; an empty string
 //     detaches it. Applied to the persistent config, so it takes effect on the
 //     next boot (the running guest keeps its current media).
+//   - networkId: moves the first NIC to another virtual network. Requires the
+//     domain to be shut off; applied to the persistent config.
 func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.VirtualMachineUpdate) (types.VirtualMachine, error) {
 	err := p.withConn(func(c *libvirt.Connect) error {
 		dom, err := c.LookupDomainByName(id)
@@ -31,7 +33,7 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 		}
 		defer dom.Free()
 
-		needsStop := req.Vcpus != nil || req.MemoryBytes != nil
+		needsStop := req.Vcpus != nil || req.MemoryBytes != nil || req.NetworkId != nil
 		var state libvirt.DomainState
 		if needsStop || req.IsoId != nil {
 			s, _, err := dom.GetState()
@@ -57,6 +59,18 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 			}
 		}
 
+		if req.NetworkId != nil {
+			if state != libvirt.DOMAIN_SHUTOFF {
+				return fmt.Errorf("%w: network changes require the virtual machine to be stopped", hypervisor.ErrInvalidVMState)
+			}
+			if _, err := c.LookupNetworkByName(*req.NetworkId); err != nil {
+				return hypervisor.ErrNetworkNotFound
+			}
+			if err := setNICNetwork(dom, *req.NetworkId); err != nil {
+				return err
+			}
+		}
+
 		if req.IsoId != nil {
 			isoID := *req.IsoId
 			if isoID != "" {
@@ -78,6 +92,50 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 		return types.VirtualMachine{}, err
 	}
 	return p.GetVirtualMachine(context.Background(), id)
+}
+
+// setNICNetwork repoints the domain's first network interface at another
+// virtual network in the persistent config (takes effect on next boot).
+func setNICNetwork(dom *libvirt.Domain, network string) error {
+	xmlStr, err := dom.GetXMLDesc(libvirt.DOMAIN_XML_INACTIVE)
+	if err != nil {
+		return fmt.Errorf("read domain xml: %w", err)
+	}
+	var dx struct {
+		NICs []struct {
+			Type string `xml:"type,attr"`
+			MAC struct {
+				Address string `xml:"address,attr"`
+			} `xml:"mac"`
+			Source struct {
+				Network string `xml:"network,attr"`
+				Bridge  string `xml:"bridge,attr"`
+			} `xml:"source"`
+			Model struct {
+				Type string `xml:"type,attr"`
+			} `xml:"model"`
+		} `xml:"devices>interface"`
+	}
+	if err := xml.Unmarshal([]byte(xmlStr), &dx); err != nil {
+		return fmt.Errorf("parse domain xml: %w", err)
+	}
+	if len(dx.NICs) == 0 {
+		return fmt.Errorf("%w: virtual machine has no network interface", hypervisor.ErrInvalidVMState)
+	}
+	nic := dx.NICs[0]
+	model := nic.Model.Type
+	if model == "" {
+		model = "virtio"
+	}
+	deviceXML := fmt.Sprintf(`<interface type='network'>
+      <mac address='%s'/>
+      <source network='%s'/>
+      <model type='%s'/>
+    </interface>`, xmlEscape(nic.MAC.Address), xmlEscape(network), xmlEscape(model))
+	if err := dom.UpdateDeviceFlags(deviceXML, libvirt.DomainDeviceModifyFlags(libvirt.DOMAIN_AFFECT_CONFIG)); err != nil {
+		return fmt.Errorf("update interface: %w", err)
+	}
+	return nil
 }
 
 // setCDROM attaches, swaps or detaches the domain's CD-ROM in the persistent

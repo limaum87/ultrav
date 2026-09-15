@@ -962,6 +962,12 @@ export interface components {
              * @example ubuntu-24.04-live-server.iso
              */
             isoId?: string;
+            /**
+             * @description Moves the VM's network interface to another virtual network.
+             *     Requires the VM to be stopped (applied to the persistent config).
+             * @example br0
+             */
+            networkId?: string;
         };
         DiskCreate: {
             /** @example default */

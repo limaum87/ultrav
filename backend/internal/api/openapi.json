@@ -2459,6 +2459,11 @@
             "type": "string",
             "description": "ISO filename from the library to attach/swap; an empty string detaches the current ISO.",
             "example": "ubuntu-24.04-live-server.iso"
+          },
+          "networkId": {
+            "type": "string",
+            "description": "Moves the VM's network interface to another virtual network.\nRequires the VM to be stopped (applied to the persistent config).\n",
+            "example": "br0"
           }
         }
       },

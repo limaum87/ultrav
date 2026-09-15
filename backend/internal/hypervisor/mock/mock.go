@@ -71,6 +71,16 @@ type vmState struct {
 	disks []types.Disk
 	// iso is the filename of the ISO attached as install media ("" = none).
 	iso string
+	// network is the virtual network the first NIC attaches to.
+	network string
+}
+
+// networkOrDefault returns the VM's attached network (default when unset).
+func (vm *vmState) networkOrDefault() string {
+	if vm.network != "" {
+		return vm.network
+	}
+	return "default"
 }
 
 // Provider is an in-memory simulated KVM host.
@@ -331,9 +341,9 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 	if err != nil {
 		return types.VirtualMachine{}, err
 	}
-	needsStop := req.Vcpus != nil || req.MemoryBytes != nil
+	needsStop := req.Vcpus != nil || req.MemoryBytes != nil || req.NetworkId != nil
 	if needsStop && vm.state != types.VMStateStopped {
-		return types.VirtualMachine{}, fmt.Errorf("%w: vCPU and memory changes require the virtual machine to be stopped", hypervisor.ErrInvalidVMState)
+		return types.VirtualMachine{}, fmt.Errorf("%w: vCPU, memory and network changes require the virtual machine to be stopped", hypervisor.ErrInvalidVMState)
 	}
 	if req.Vcpus != nil {
 		vm.spec.vcpus = *req.Vcpus
@@ -343,6 +353,19 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 	}
 	if req.IsoId != nil {
 		vm.iso = *req.IsoId
+	}
+	if req.NetworkId != nil {
+		found := false
+		for i := range networks {
+			if networks[i].id == *req.NetworkId {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return types.VirtualMachine{}, hypervisor.ErrNetworkNotFound
+		}
+		vm.network = *req.NetworkId
 	}
 	return p.toModel(vm), nil
 }
@@ -404,7 +427,7 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		Name:       "ens3",
 		Model:      types.NetworkInterfaceModelVirtio,
 		MacAddress: &vm.spec.mac,
-		Network:    ptr("default"),
+		Network:    ptr(vm.networkOrDefault()),
 	}}
 	if vm.state == types.VMStateRunning || vm.state == types.VMStateShuttingDown {
 		uptime := int(time.Since(vm.bootTime).Seconds())

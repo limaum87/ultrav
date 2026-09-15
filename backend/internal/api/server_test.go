@@ -586,6 +586,32 @@ func TestUpdateVirtualMachine(t *testing.T) {
 		t.Errorf("detach: %d %v", res.StatusCode, body["isoId"])
 	}
 
+	// Move a stopped VM to another network: reflected on the interface.
+	res, body = patchJSON(t, s, "/api/v1/vms/monitoring01", map[string]any{"networkId": "mgmt"})
+	if res.StatusCode != 200 {
+		t.Fatalf("network change: %d %v", res.StatusCode, body)
+	}
+	nics, _ := body["networkInterfaces"].([]any)
+	if len(nics) != 1 {
+		t.Fatalf("nics = %v", body["networkInterfaces"])
+	}
+	nic := nics[0].(map[string]any)
+	if nic["network"] != "mgmt" {
+		t.Errorf("nic network = %v", nic["network"])
+	}
+
+	// Network change on a running VM is rejected with 409.
+	res, _ = patchJSON(t, s, "/api/v1/vms/erp01", map[string]any{"networkId": "mgmt"})
+	if res.StatusCode != 409 {
+		t.Errorf("running network change: expected 409, got %d", res.StatusCode)
+	}
+
+	// Unknown network -> 404.
+	res, _ = patchJSON(t, s, "/api/v1/vms/monitoring01", map[string]any{"networkId": "ghost-net"})
+	if res.StatusCode != 404 {
+		t.Errorf("unknown network: expected 404, got %d", res.StatusCode)
+	}
+
 	// vCPU change on a running VM is rejected with 409.
 	res, body = patchJSON(t, s, "/api/v1/vms/erp01", map[string]any{"vcpus": 8})
 	if res.StatusCode != 409 {

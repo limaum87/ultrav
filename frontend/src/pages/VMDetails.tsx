@@ -26,6 +26,7 @@ import {
 type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
 
 type IsoList = components['schemas']['IsoList'];
+type NetworkList = components['schemas']['NetworkList'];
 const GiB = 1024 * 1024 * 1024;
 
 const TABS = [
@@ -361,7 +362,9 @@ function SettingsTab({ vm, onChanged }: { vm: VirtualMachine; onChanged: () => v
   const [vcpus, setVcpus] = useState(String(vm.vcpus));
   const [memoryGiB, setMemoryGiB] = useState(String(+(vm.memoryBytes / GiB).toFixed(2)));
   const [isoId, setIsoId] = useState<string>(vm.isoId ?? '');
+  const [networkId, setNetworkId] = useState<string>(vm.networkInterfaces?.[0]?.network ?? '');
   const [isos, setIsos] = useState<IsoList | null>(null);
+  const [networks, setNetworks] = useState<NetworkList | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -369,12 +372,16 @@ function SettingsTab({ vm, onChanged }: { vm: VirtualMachine; onChanged: () => v
     unwrap(api.GET('/storage/isos'))
       .then(setIsos)
       .catch(() => setIsos({ items: [], total: 0 }));
+    unwrap(api.GET('/networks'))
+      .then(setNetworks)
+      .catch(() => setNetworks({ items: [], total: 0 }));
   }, []);
 
   const vcpusNum = Number(vcpus);
   const memoryBytes = Math.round(Number(memoryGiB) * GiB);
   const hardwareDirty = vcpusNum !== vm.vcpus || memoryBytes !== vm.memoryBytes;
   const isoDirty = isoId !== (vm.isoId ?? '');
+  const networkDirty = networkId !== (vm.networkInterfaces?.[0]?.network ?? '');
   const valid =
     Number.isFinite(vcpusNum) && vcpusNum >= 1 && vcpusNum <= 64 &&
     Number.isFinite(memoryBytes) && memoryBytes >= 16 * 1024 * 1024;
@@ -390,6 +397,7 @@ function SettingsTab({ vm, onChanged }: { vm: VirtualMachine; onChanged: () => v
         if (memoryBytes !== vm.memoryBytes) body.memoryBytes = memoryBytes;
       }
       if (isoDirty) body.isoId = isoId;
+      if (networkDirty) body.networkId = networkId;
       await unwrap(api.PATCH('/vms/{id}', { params: { path: { id: vm.id } }, body }));
       toast.push('success', `${vm.name}: settings updated${!stopped && (hardwareDirty || isoDirty) ? ' (applies on next boot)' : ''}`);
       onChanged();
@@ -448,8 +456,23 @@ function SettingsTab({ vm, onChanged }: { vm: VirtualMachine; onChanged: () => v
             ))}
           </select>
         </label>
+        <label className="field">
+          <span>Network</span>
+          <select
+            value={networkId}
+            onChange={(e) => setNetworkId(e.target.value)}
+            disabled={!stopped || saving}
+          >
+            {(networks?.items ?? []).map((net) => (
+              <option key={net.id} value={net.id} disabled={net.state !== 'active'}>
+                {net.name} ({net.mode}){net.state !== 'active' ? ' — inactive' : ''}
+              </option>
+            ))}
+          </select>
+          {!stopped && <small className="field-hint">Stop the VM to change its network.</small>}
+        </label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-primary" type="submit" disabled={!valid || saving || (!hardwareDirty && !isoDirty)}>
+          <button className="btn btn-primary" type="submit" disabled={!valid || saving || (!hardwareDirty && !isoDirty && !networkDirty)}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
           {!stopped && hardwareDirty && (

@@ -492,7 +492,11 @@ type VirtualMachineUpdate struct {
 	// IsoId ISO filename from the library to attach/swap; an empty string detaches the current ISO.
 	IsoId       *string `json:"isoId,omitempty"`
 	MemoryBytes *int64  `json:"memoryBytes,omitempty"`
-	Vcpus       *int    `json:"vcpus,omitempty"`
+
+	// NetworkId Moves the VM's network interface to another virtual network.
+	// Requires the VM to be stopped (applied to the persistent config).
+	NetworkId *string `json:"networkId,omitempty"`
+	Vcpus     *int    `json:"vcpus,omitempty"`
 }
 
 // VmMetrics Point-in-time resource utilization of a running virtual machine. The whole object is absent while the VM is not running. Individual fields are null when the host cannot report them (e.g. no balloon driver / guest agent, or a first sample with no previous sample to diff against). Values are computed by the hypervisor provider, which is allowed to keep a short-lived sampling cache per VM.
