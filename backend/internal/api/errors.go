@@ -31,7 +31,7 @@ const (
 	CodeUserAlreadyExists    = "USER_ALREADY_EXISTS"
 	CodeLastAdmin            = "LAST_ADMIN"
 	CodeInternalError        = "INTERNAL_ERROR"
-	CodeConsoleUnavailable  = "CONSOLE_UNAVAILABLE"
+	CodeConsoleUnavailable   = "CONSOLE_UNAVAILABLE"
 )
 
 // errorStatus maps error codes to HTTP status codes.
@@ -56,7 +56,7 @@ var errorStatus = map[string]int{
 	CodeUserAlreadyExists:    http.StatusConflict,
 	CodeLastAdmin:            http.StatusConflict,
 	CodeInternalError:        http.StatusInternalServerError,
-	CodeConsoleUnavailable:  http.StatusConflict,
+	CodeConsoleUnavailable:   http.StatusConflict,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,

@@ -140,9 +140,9 @@ func (s *Service) CreateUser(username, password, role string) (*User, error) {
 // Login validates credentials and returns a signed token plus the user.
 func (s *Service) Login(username, password string) (token string, user *User, err error) {
 	var (
-		id             int64
-		hash           string
-		u              User
+		id            int64
+		hash          string
+		u             User
 		createdAtUnix int64
 	)
 	err = s.db.QueryRow(`SELECT id, username, password_hash, role, created_at FROM users WHERE username = ?`, username).
@@ -163,11 +163,11 @@ func (s *Service) Login(username, password string) (token string, user *User, er
 	u.ID = id
 	now := time.Now()
 	claims := jwt.MapClaims{
-		"sub":   u.Username,
-		"uid":   u.ID,
-		"role":  u.Role,
-		"iat":   now.Unix(),
-		"exp":   now.Add(TokenTTL).Unix(),
+		"sub":  u.Username,
+		"uid":  u.ID,
+		"role": u.Role,
+		"iat":  now.Unix(),
+		"exp":  now.Add(TokenTTL).Unix(),
 	}
 	token, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
 	if err != nil {

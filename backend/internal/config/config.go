@@ -39,13 +39,13 @@ type Config struct {
 // Load reads configuration from the environment, applying defaults.
 func Load() (Config, error) {
 	cfg := Config{
-		Port:       envOr("ULTRAV_PORT", "8080"),
-		Provider:   Provider(envOr("HYPERVISOR_PROVIDER", string(ProviderMock))),
-		CORSOrigin: os.Getenv("ULTRAV_CORS_ORIGIN"),
-		LibvirtURI: envOr("HYPERVISOR_LIBVIRT_URI", "qemu:///system"),
-		IsoDir:     envOr("ULTRAV_ISO_DIR", "/var/lib/libvirt/images/isos"),
-		DBPath:     envOr("ULTRAV_DB_PATH", "/var/lib/ultrav/ultrav.db"),
-		JWTSecret:  os.Getenv("ULTRAV_JWT_SECRET"),
+		Port:          envOr("ULTRAV_PORT", "8080"),
+		Provider:      Provider(envOr("HYPERVISOR_PROVIDER", string(ProviderMock))),
+		CORSOrigin:    os.Getenv("ULTRAV_CORS_ORIGIN"),
+		LibvirtURI:    envOr("HYPERVISOR_LIBVIRT_URI", "qemu:///system"),
+		IsoDir:        envOr("ULTRAV_ISO_DIR", "/var/lib/libvirt/images/isos"),
+		DBPath:        envOr("ULTRAV_DB_PATH", "/var/lib/ultrav/ultrav.db"),
+		JWTSecret:     os.Getenv("ULTRAV_JWT_SECRET"),
 		AdminUser:     os.Getenv("ULTRAV_ADMIN_USER"),
 		AdminPassword: os.Getenv("ULTRAV_ADMIN_PASSWORD"),
 	}
