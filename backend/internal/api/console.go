@@ -54,10 +54,16 @@ func (s *Server) handleVMConsole(w http.ResponseWriter, r *http.Request) {
 	// captured with a QEMU monitor screendump. Best effort: on any error the
 	// connection is dropped and noVNC retries (ending up as a plain proxy).
 	if dumper, ok := s.provider.(hypervisor.ScreenDumper); ok {
-		if err := s.bootstrapConsoleFrame(ws, conn, dumper, r.Context(), id); err != nil {
+		leftover, err := s.bootstrapConsoleFrame(ws, conn, dumper, r.Context(), id)
+		if err != nil {
 			s.log.Warn("console framebuffer bootstrap failed",
 				"vm", id, "err", err)
 			return
+		}
+		if len(leftover) > 0 {
+			if _, err := conn.Write(leftover); err != nil {
+				return
+			}
 		}
 	}
 
@@ -142,6 +148,11 @@ func (s *rfbWS) write(b []byte) error {
 	return s.ws.Write(wctx, websocket.MessageBinary, b)
 }
 
+// leftover reports bytes read ahead from the WebSocket (a client message may
+// carry SetPixelFormat + SetEncodings + FBURQ coalesced in a single frame).
+// They must be forwarded to the VNC server after the handshake.
+func (s *rfbWS) leftover() []byte { return s.buf }
+
 // vncSource reads exact byte counts from the VNC (server) side.
 type vncSource struct {
 	r io.Reader
@@ -167,13 +178,17 @@ type rfbClient interface {
 // negotiated its pixel format, it captures a screendump and injects a full
 // framebuffer update so noVNC paints the current screen immediately. The
 // remaining bytes flow through the plain proxy loop afterwards.
-func (s *Server) bootstrapConsoleFrame(ws *websocket.Conn, conn net.Conn, dumper hypervisor.ScreenDumper, ctx context.Context, id string) error {
+func (s *Server) bootstrapConsoleFrame(ws *websocket.Conn, conn net.Conn, dumper hypervisor.ScreenDumper, ctx context.Context, id string) ([]byte, error) {
 	// Bound the handshake phase.
 	conn.SetDeadline(time.Now().Add(bootstrapTimeout))
 	defer conn.SetDeadline(time.Time{})
 
 	c := &rfbWS{ws: ws, ctx: ctx}
-	return runRFBBootstrap(c, conn, func() ([]byte, error) { return dumper.ScreenDumpVM(ctx, id) })
+	err := runRFBBootstrap(c, conn, func() ([]byte, error) { return dumper.ScreenDumpVM(ctx, id) })
+	// Bytes read ahead from the WebSocket belong to the VNC server: dropping
+	// them would desync the session (e.g. a coalesced SetPixelFormat +
+	// SetEncodings + FBURQ frame).
+	return c.leftover(), err
 }
 
 // runRFBBootstrap performs the RFB handshake relaying and injects the
