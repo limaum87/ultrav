@@ -888,6 +888,115 @@
       }
     },
     "/networks/{id}": {
+      "put": {
+        "operationId": "updateNetwork",
+        "tags": [
+          "Network"
+        ],
+        "summary": "Update a virtual network",
+        "description": "Updates a virtual network's persistent definition. Fields left null\nkeep their current value. Structural changes (mode, bridgeName, cidr,\ndhcpEnabled) require the network to be inactive (409 otherwise);\n`autostart` can be changed at any time. The network name is immutable.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated network",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Network"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (bad CIDR, missing bridgeName for bridge mode, ...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Network not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Network is active (stop it before structural changes)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteNetwork",
+        "tags": [
+          "Network"
+        ],
+        "summary": "Delete a virtual network",
+        "description": "Undefines the virtual network. The network must be inactive\n(409 otherwise). VMs keep their interface definitions but lose\nconnectivity through this network.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceID"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Network deleted"
+          },
+          "404": {
+            "description": "Network not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Network is active (stop it before deleting)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
       "get": {
         "operationId": "getNetwork",
         "tags": [
@@ -1910,6 +2019,43 @@
             "type": "string",
             "example": "lan"
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "nat",
+              "bridge",
+              "isolated"
+            ],
+            "example": "nat"
+          },
+          "bridgeName": {
+            "type": "string",
+            "nullable": true,
+            "example": "br0",
+            "description": "Host bridge to attach to (required when mode is bridge)."
+          },
+          "cidr": {
+            "type": "string",
+            "nullable": true,
+            "example": "192.168.100.0/24",
+            "description": "Subnet for nat/isolated modes (required for those modes)."
+          },
+          "dhcpEnabled": {
+            "type": "boolean",
+            "nullable": true,
+            "example": true
+          },
+          "autostart": {
+            "type": "boolean",
+            "nullable": true,
+            "example": true
+          }
+        }
+      },
+      "NetworkUpdate": {
+        "type": "object",
+        "description": "Fields left null keep their current value.",
+        "properties": {
           "mode": {
             "type": "string",
             "enum": [

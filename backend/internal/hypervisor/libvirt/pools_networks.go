@@ -373,11 +373,135 @@ func (p *Provider) CreateNetwork(_ context.Context, req types.NetworkCreate) (ty
 	return p.GetNetwork(context.Background(), req.Name)
 }
 
+// UpdateNetwork applies a partial update to a network's persistent
+// definition. Fields left nil keep their current value. Structural changes
+// (mode, bridgeName, cidr, dhcpEnabled) require the network to be inactive;
+// autostart can be toggled at any time.
+func (p *Provider) UpdateNetwork(_ context.Context, id string, req types.NetworkUpdate) (types.Network, error) {
+	err := p.withConn(func(c *libvirt.Connect) error {
+		n, err := c.LookupNetworkByName(id)
+		if err != nil {
+			return hypervisor.ErrNetworkNotFound
+		}
+		active, err := n.IsActive()
+		if err != nil {
+			return err
+		}
+		structural := req.Mode != nil || req.BridgeName != nil || req.Cidr != nil || req.DhcpEnabled != nil
+		if active && structural {
+			return fmt.Errorf("%w: stop the network before structural changes", hypervisor.ErrInvalidNetworkState)
+		}
+
+		autostartChanged := req.Autostart != nil
+		if !structural {
+			// autostart-only change: apply directly, no redefine needed
+			if autostartChanged {
+				if err := n.SetAutostart(*req.Autostart); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+		// merge current config with the requested changes and redefine
+		var nx networkXML
+		xmlStr, err := n.GetXMLDesc(0)
+		if err != nil {
+			return err
+		}
+		if err := xml.Unmarshal([]byte(xmlStr), &nx); err != nil {
+			return err
+		}
+
+		mode := req.Mode
+		if mode == nil {
+			m := networkForwardMode(nx.Forward.Mode)
+			mode = (*types.NetworkUpdateMode)(&m)
+		}
+		create := types.NetworkCreate{
+			Name: id,
+			Mode: types.NetworkCreateMode(*mode),
+		}
+		switch create.Mode {
+		case types.NetworkCreateModeBridge:
+			if req.BridgeName != nil {
+				create.BridgeName = req.BridgeName
+			} else if nx.Bridge.Name != "" {
+				bn := nx.Bridge.Name
+				create.BridgeName = &bn
+			}
+		case types.NetworkCreateModeNat, types.NetworkCreateModeIsolated:
+			if req.Cidr != nil {
+				create.Cidr = req.Cidr
+			} else if nx.IP.Address != "" {
+				cidr := cidrFromIPPrefix(nx.IP.Address, nx.IP.Prefix)
+				if cidr == "" {
+					return fmt.Errorf("%w: cannot determine current subnet; pass cidr explicitly", hypervisor.ErrInvalidNetworkState)
+				}
+				create.Cidr = &cidr
+			}
+			if req.DhcpEnabled != nil {
+				create.DhcpEnabled = req.DhcpEnabled
+			} else {
+				dhcp := nx.IP.DHCP != nil
+				create.DhcpEnabled = &dhcp
+			}
+		}
+		xmlDef, err := networkCreateXML(create)
+		if err != nil {
+			return err
+		}
+		// defining an existing name updates its persistent definition
+		if _, err := c.NetworkDefineXML(xmlDef); err != nil {
+			return err
+		}
+		if autostartChanged {
+			if updated, err := c.LookupNetworkByName(id); err == nil {
+				_ = updated.SetAutostart(*req.Autostart)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return types.Network{}, err
+	}
+	return p.GetNetwork(context.Background(), id)
+}
+
+// DeleteNetwork undefines an inactive virtual network.
+func (p *Provider) DeleteNetwork(_ context.Context, id string) error {
+	return p.withConn(func(c *libvirt.Connect) error {
+		n, err := c.LookupNetworkByName(id)
+		if err != nil {
+			return hypervisor.ErrNetworkNotFound
+		}
+		active, err := n.IsActive()
+		if err != nil {
+			return err
+		}
+		if active {
+			return fmt.Errorf("%w: stop the network before deleting", hypervisor.ErrInvalidNetworkState)
+		}
+		return n.Undefine()
+	})
+}
+
+// cidrFromIPPrefix renders "a.b.c.d/prefix" as a CIDR string.
+func cidrFromIPPrefix(ipStr string, prefix int) string {
+	ip := net.ParseIP(ipStr)
+	if ip == nil || prefix <= 0 || prefix > 32 {
+		return ""
+	}
+	return fmt.Sprintf("%s/%d", ip.String(), prefix)
+}
+
 // cidrPattern accepts dotted-quad/prefix subnets (e.g. 192.168.100.0/24).
 var cidrPattern = regexp.MustCompile(`^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$`)
 
 // ifaceNamePattern is an allowlist for interface names (host bridges).
 var ifaceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,15}$`)
+
+var _ = cidrPattern // reused by update path above
 
 // networkCreateXML builds the libvirt network XML for the three supported
 // modes. Validation errors are surfaced as ErrInvalidNetworkState so the API

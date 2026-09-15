@@ -218,6 +218,84 @@ func (p *Provider) CreateNetwork(_ context.Context, req types.NetworkCreate) (ty
 	return networkToModel(networks[len(networks)-1]), nil
 }
 
+// UpdateNetwork applies a partial update to a simulated network.
+func (p *Provider) UpdateNetwork(_ context.Context, id string, req types.NetworkUpdate) (types.Network, error) {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	n, err := p.networkLocked(id)
+	if err != nil {
+		return types.Network{}, err
+	}
+	structural := req.Mode != nil || req.BridgeName != nil || req.Cidr != nil || req.DhcpEnabled != nil
+	if n.active && structural {
+		return types.Network{}, fmt.Errorf("%w: stop the network before structural changes", hypervisor.ErrInvalidNetworkState)
+	}
+	if req.Autostart != nil {
+		n.autostart = *req.Autostart
+	}
+	if structural {
+		mode := ""
+		if req.Mode != nil {
+			mode = string(*req.Mode)
+		} else {
+			mode = n.mode
+		}
+		if types.NetworkMode(mode) == types.NetworkModeBridge {
+			bn := ""
+			if req.BridgeName != nil {
+				bn = *req.BridgeName
+			} else {
+				bn = n.bridge
+			}
+			if bn == "" {
+				return types.Network{}, fmt.Errorf("%w: bridgeName is required for bridge networks", hypervisor.ErrInvalidNetworkState)
+			}
+			n.bridge = bn
+			n.ip, n.prefix, n.dhcp = "", 0, false
+		} else {
+			cidr := ""
+			if req.Cidr != nil {
+				cidr = *req.Cidr
+			} else if n.ip != "" {
+				cidr = fmt.Sprintf("%s/%d", n.ip, n.prefix)
+			}
+			if cidr == "" {
+				return types.Network{}, fmt.Errorf("%w: cidr is required for nat/isolated networks", hypervisor.ErrInvalidNetworkState)
+			}
+			_, ipNet, err := net.ParseCIDR(cidr)
+			if err != nil {
+				return types.Network{}, fmt.Errorf("%w: invalid cidr: %v", hypervisor.ErrInvalidNetworkState, err)
+			}
+			gw := make(net.IP, len(ipNet.IP.To4()))
+			copy(gw, ipNet.IP.To4())
+			gw[len(gw)-1]++
+			n.ip = gw.String()
+			n.prefix, _ = ipNet.Mask.Size()
+			n.dhcp = req.DhcpEnabled == nil || *req.DhcpEnabled
+		}
+		n.mode = mode
+	}
+	return networkToModel(*n), nil
+}
+
+// DeleteNetwork removes an inactive simulated network.
+func (p *Provider) DeleteNetwork(_ context.Context, id string) error {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	for i := range networks {
+		if networks[i].id == id {
+			if networks[i].active {
+				return fmt.Errorf("%w: stop the network before deleting", hypervisor.ErrInvalidNetworkState)
+			}
+			networks = append(networks[:i], networks[i+1:]...)
+			return nil
+		}
+	}
+	return hypervisor.ErrNetworkNotFound
+}
+
 // ListHostBridges returns an empty list: the mock host (kvm01) has no host
 // bridges configured, which exercises the UI's "no bridges found" guidance.
 func (p *Provider) ListHostBridges(_ context.Context) ([]types.HostBridge, error) {

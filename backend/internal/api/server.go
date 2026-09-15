@@ -95,6 +95,8 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/networks/{id}", s.requireValidVMID(s.handleGetNetwork))
 	mux.HandleFunc("POST /api/v1/networks/{id}/start", s.requireValidVMID(s.handleStartNetwork))
 	mux.HandleFunc("POST /api/v1/networks/{id}/stop", s.requireValidVMID(s.handleStopNetwork))
+	mux.HandleFunc("PUT /api/v1/networks/{id}", s.requireValidVMID(s.handleUpdateNetwork))
+	mux.HandleFunc("DELETE /api/v1/networks/{id}", s.requireValidVMID(s.handleDeleteNetwork))
 	mux.HandleFunc("GET /api/v1/host/bridges", s.handleListHostBridges)
 
 	// Contract & docs
@@ -490,6 +492,53 @@ func (s *Server) handleStopNetwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, net)
+}
+
+// handleUpdateNetwork applies a partial update to a virtual network.
+func (s *Server) handleUpdateNetwork(w http.ResponseWriter, r *http.Request) {
+	var req types.NetworkUpdate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, r, CodeValidationError, "Invalid JSON body")
+		return
+	}
+	if msg := validateUpdateNetwork(&req); msg != "" {
+		s.writeError(w, r, CodeValidationError, msg)
+		return
+	}
+	net, err := s.provider.UpdateNetwork(r.Context(), r.PathValue("id"), req)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, net)
+}
+
+func validateUpdateNetwork(req *types.NetworkUpdate) string {
+	if req.Cidr != nil && (!cidrPattern.MatchString(*req.Cidr) || func() bool { _, _, err := net.ParseCIDR(*req.Cidr); return err != nil }()) {
+		return "cidr is not a valid subnet (e.g. 192.168.100.0/24)"
+	}
+	if req.BridgeName != nil && !vmIDPattern.MatchString(*req.BridgeName) {
+		return "bridgeName must be a valid interface name"
+	}
+	if req.Mode == nil {
+		return ""
+	}
+	switch *req.Mode {
+	case types.Nat, types.Isolated:
+	case types.Bridge:
+	default:
+		return "mode must be one of: nat, bridge, isolated"
+	}
+	return ""
+}
+
+// handleDeleteNetwork undefines an inactive virtual network.
+func (s *Server) handleDeleteNetwork(w http.ResponseWriter, r *http.Request) {
+	if err := s.provider.DeleteNetwork(r.Context(), r.PathValue("id")); err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- contract & docs ---

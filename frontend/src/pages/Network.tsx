@@ -3,6 +3,7 @@ import { api, unwrap, ApiError, type Network } from '../api/client';
 import { usePolling } from '../lib/hooks';
 import { ActionMenu, EmptyState, MetricCard, TableSkeleton, type MenuItem } from '../components/ui';
 import { CreateNetworkModal } from '../components/CreateNetworkModal';
+import { EditNetworkModal } from '../components/EditNetworkModal';
 import { useToast } from '../components/Toast';
 import { Network as NetworkIcon, CirclePlay, Zap } from 'lucide-react';
 
@@ -10,6 +11,7 @@ export default function NetworkPage() {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Network | null>(null);
   const { data, error, loading, refresh } = usePolling(async () =>
     unwrap(api.GET('/networks')),
   );
@@ -20,6 +22,23 @@ export default function NetworkPage() {
       try {
         await unwrap(api.POST(`/networks/{id}/${action}`, { params: { path: { id: net.id } } }));
         toast.push('success', `${net.name}: ${action} requested`);
+        await refresh();
+      } catch (e) {
+        toast.push('error', e instanceof ApiError ? `${net.name}: ${e.code} — ${e.message}` : String(e));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refresh, toast],
+  );
+
+  const deleteNet = useCallback(
+    async (net: Network) => {
+      if (!window.confirm(`Delete network "${net.name}"? This cannot be undone.`)) return;
+      setBusy(net.id);
+      try {
+        await unwrap(api.DELETE('/networks/{id}', { params: { path: { id: net.id } } }));
+        toast.push('success', `${net.name}: deleted`);
         await refresh();
       } catch (e) {
         toast.push('error', e instanceof ApiError ? `${net.name}: ${e.code} — ${e.message}` : String(e));
@@ -51,6 +70,12 @@ export default function NetworkPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onCreated={() => void refresh()}
+      />
+
+      <EditNetworkModal
+        network={editing}
+        onClose={() => setEditing(null)}
+        onUpdated={() => void refresh()}
       />
 
       <section className="metric-grid">
@@ -106,6 +131,16 @@ export default function NetworkPage() {
                     label: 'Stop',
                     onSelect: () => void runAction(net, 'stop'),
                     disabled: busy === net.id || net.state !== 'active',
+                  },
+                  {
+                    label: 'Edit',
+                    onSelect: () => setEditing(net),
+                    disabled: busy === net.id,
+                  },
+                  {
+                    label: 'Delete',
+                    onSelect: () => void deleteNet(net),
+                    disabled: busy === net.id || net.state === 'active',
                   },
                 ];
                 return (

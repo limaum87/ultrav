@@ -365,9 +365,22 @@ export interface paths {
         };
         /** Get a virtual network */
         get: operations["getNetwork"];
-        put?: never;
+        /**
+         * Update a virtual network
+         * @description Updates a virtual network's persistent definition. Fields left null
+         *     keep their current value. Structural changes (mode, bridgeName, cidr,
+         *     dhcpEnabled) require the network to be inactive (409 otherwise);
+         *     `autostart` can be changed at any time. The network name is immutable.
+         */
+        put: operations["updateNetwork"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete a virtual network
+         * @description Undefines the virtual network. The network must be inactive
+         *     (409 otherwise). VMs keep their interface definitions but lose
+         *     connectivity through this network.
+         */
+        delete: operations["deleteNetwork"];
         options?: never;
         head?: never;
         patch?: never;
@@ -745,6 +758,28 @@ export interface components {
              * @enum {string}
              */
             mode: "nat" | "bridge" | "isolated";
+            /**
+             * @description Host bridge to attach to (required when mode is bridge).
+             * @example br0
+             */
+            bridgeName?: string | null;
+            /**
+             * @description Subnet for nat/isolated modes (required for those modes).
+             * @example 192.168.100.0/24
+             */
+            cidr?: string | null;
+            /** @example true */
+            dhcpEnabled?: boolean | null;
+            /** @example true */
+            autostart?: boolean | null;
+        };
+        /** @description Fields left null keep their current value. */
+        NetworkUpdate: {
+            /**
+             * @example nat
+             * @enum {string}
+             */
+            mode?: "nat" | "bridge" | "isolated";
             /**
              * @description Host bridge to attach to (required when mode is bridge).
              * @example br0
@@ -1940,6 +1975,101 @@ export interface operations {
             };
             /** @description Network not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateNetwork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource identifier (libvirt name). */
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated network */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Network"];
+                };
+            };
+            /** @description Invalid input (bad CIDR, missing bridgeName for bridge mode, ...) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Network not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Network is active (stop it before structural changes) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteNetwork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource identifier (libvirt name). */
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Network deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Network not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Network is active (stop it before deleting) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

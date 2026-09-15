@@ -55,6 +55,12 @@ type Provider interface {
 	CreateNetwork(ctx context.Context, req types.NetworkCreate) (types.Network, error)
 	StartNetwork(ctx context.Context, id string) (types.Network, error)
 	StopNetwork(ctx context.Context, id string) (types.Network, error)
+	// UpdateNetwork applies a partial update to a network's persistent
+	// definition. Structural changes require the network to be inactive;
+	// autostart can change at any time. Name is immutable.
+	UpdateNetwork(ctx context.Context, id string, req types.NetworkUpdate) (types.Network, error)
+	// DeleteNetwork undefines a network; it must be inactive.
+	DeleteNetwork(ctx context.Context, id string) error
 	// ListHostBridges returns Linux bridges configured on the host (e.g. br0),
 	// which bridge-mode virtual networks attach to.
 	ListHostBridges(ctx context.Context) ([]types.HostBridge, error)

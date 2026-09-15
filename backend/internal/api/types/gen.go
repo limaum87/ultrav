@@ -70,6 +70,13 @@ const (
 	NetworkInterfaceModelVirtio  NetworkInterfaceModel = "virtio"
 )
 
+// Defines values for NetworkUpdateMode.
+const (
+	Bridge   NetworkUpdateMode = "bridge"
+	Isolated NetworkUpdateMode = "isolated"
+	Nat      NetworkUpdateMode = "nat"
+)
+
 // Defines values for ReadinessHypervisor.
 const (
 	ReadinessHypervisorReady       ReadinessHypervisor = "ready"
@@ -335,6 +342,22 @@ type NetworkList struct {
 	Total int       `json:"total"`
 }
 
+// NetworkUpdate Fields left null keep their current value.
+type NetworkUpdate struct {
+	Autostart *bool `json:"autostart"`
+
+	// BridgeName Host bridge to attach to (required when mode is bridge).
+	BridgeName *string `json:"bridgeName"`
+
+	// Cidr Subnet for nat/isolated modes (required for those modes).
+	Cidr        *string            `json:"cidr"`
+	DhcpEnabled *bool              `json:"dhcpEnabled"`
+	Mode        *NetworkUpdateMode `json:"mode,omitempty"`
+}
+
+// NetworkUpdateMode defines model for NetworkUpdate.Mode.
+type NetworkUpdateMode string
+
 // Readiness defines model for Readiness.
 type Readiness struct {
 	Hypervisor ReadinessHypervisor `json:"hypervisor"`
@@ -530,6 +553,9 @@ type ChangeOwnPasswordJSONRequestBody = ChangePasswordRequest
 
 // CreateNetworkJSONRequestBody defines body for CreateNetwork for application/json ContentType.
 type CreateNetworkJSONRequestBody = NetworkCreate
+
+// UpdateNetworkJSONRequestBody defines body for UpdateNetwork for application/json ContentType.
+type UpdateNetworkJSONRequestBody = NetworkUpdate
 
 // UploadIsoMultipartRequestBody defines body for UploadIso for multipart/form-data ContentType.
 type UploadIsoMultipartRequestBody UploadIsoMultipartBody

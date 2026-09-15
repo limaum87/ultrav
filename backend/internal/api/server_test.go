@@ -454,6 +454,89 @@ func TestCreateNetwork(t *testing.T) {
 	}
 }
 
+func TestUpdateAndDeleteNetwork(t *testing.T) {
+	s := testServer(t)
+
+	// create a nat network
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/networks",
+		strings.NewReader(`{"name":"lab-edit","mode":"nat","cidr":"192.168.50.0/24"}`))
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 201 {
+		t.Fatalf("create: %d", rec.Result().StatusCode)
+	}
+
+	// structural edit while active -> 409
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/networks/lab-edit",
+		strings.NewReader(`{"cidr":"192.168.60.0/24"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 409 {
+		t.Errorf("structural edit while active: expected 409, got %d", rec.Result().StatusCode)
+	}
+
+	// delete while active -> 409
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/networks/lab-edit", nil)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 409 {
+		t.Errorf("delete while active: expected 409, got %d", rec.Result().StatusCode)
+	}
+
+	// autostart-only edit works while active
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/networks/lab-edit",
+		strings.NewReader(`{"autostart":false}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	var body map[string]any
+	_ = json.NewDecoder(rec.Result().Body).Decode(&body)
+	if rec.Result().StatusCode != 200 || body["autostart"] != false {
+		t.Errorf("autostart edit: %d %v", rec.Result().StatusCode, body["autostart"])
+	}
+
+	// stop, then structural edit succeeds
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/networks/lab-edit/stop", nil)
+	s.Handler().ServeHTTP(httptest.NewRecorder(), req)
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/networks/lab-edit",
+		strings.NewReader(`{"cidr":"192.168.60.0/24","dhcpEnabled":false}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	body = nil
+	_ = json.NewDecoder(rec.Result().Body).Decode(&body)
+	if rec.Result().StatusCode != 200 {
+		t.Errorf("structural edit: %d", rec.Result().StatusCode)
+	}
+	if gw, _ := body["ipAddress"].(string); gw != "192.168.60.1" {
+		t.Errorf("new gateway: got %v", body["ipAddress"])
+	}
+	if body["dhcpEnabled"] != false {
+		t.Errorf("dhcp disabled: got %v", body["dhcpEnabled"])
+	}
+
+	// bad cidr -> 400
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/networks/lab-edit",
+		strings.NewReader(`{"cidr":"not-a-cidr"}`))
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 400 {
+		t.Errorf("bad cidr: expected 400, got %d", rec.Result().StatusCode)
+	}
+
+	// delete inactive -> 204, then 404
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/networks/lab-edit", nil)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 204 {
+		t.Errorf("delete: expected 204, got %d", rec.Result().StatusCode)
+	}
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/networks/lab-edit", nil)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Result().StatusCode != 404 {
+		t.Errorf("delete again: expected 404, got %d", rec.Result().StatusCode)
+	}
+}
+
 func TestListHostBridges(t *testing.T) {
 	s := testServer(t)
 
