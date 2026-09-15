@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,6 +110,8 @@ func (p *Provider) ListVirtualMachines(_ context.Context) ([]types.VirtualMachin
 
 // CreateVirtualMachine allocates a disk volume in the requested storage
 // pool and defines the domain (stopped, or started when req.Start is true).
+// The requested osType selects a performance profile (see domainxml.go); the
+// applied profile is reported back in the returned VM.
 func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMachineCreate) (types.VirtualMachine, error) {
 	format := "qcow2"
 	if req.Disk.Format != nil {
@@ -118,6 +121,11 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		def := "default"
 		req.NetworkId = &def
 	}
+	osType := types.VirtualMachineCreateOsTypeLinux
+	if req.OsType != nil && *req.OsType != "" {
+		osType = *req.OsType
+	}
+	var warnings []string
 
 	err := p.withConn(func(c *libvirt.Connect) error {
 		// Refuse to redefine an existing domain.
@@ -171,59 +179,64 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 			isoPath = path
 		}
 
-		// With install media, per-device boot order makes the CD-ROM first.
-		osBoot := "    <boot dev='hd'/>\n"
-		diskBootTag := ""
-		cdrom := ""
-		if isoPath != "" {
-			osBoot = ""
-			diskBootTag = "\n      <boot order='2'/>"
-			cdrom = fmt.Sprintf(`
-    <disk type='file' device='cdrom'>
-      <driver name='qemu' type='raw'/>
-      <source file='%s'/>
-      <target dev='sda' bus='sata'/>
-      <readonly/>
-      <boot order='1'/>
-    </disk>`, xmlEscape(isoPath))
+		// Optional VirtIO drivers ISO (windows installs): same validation as
+		// the install media. Only attached for windows; ignored otherwise.
+		var virtioISOPath string
+		if osType == types.VirtualMachineCreateOsTypeWindows && req.VirtioDriversIsoId != nil && *req.VirtioDriversIsoId != "" {
+			if !iso.ValidID.MatchString(*req.VirtioDriversIsoId) {
+				return fmt.Errorf("%w: invalid VirtIO drivers ISO filename", os.ErrInvalid)
+			}
+			path := filepath.Join(p.isoDir, *req.VirtioDriversIsoId)
+			if _, err := os.Stat(path); err != nil {
+				return hypervisor.ErrIsoNotFound
+			}
+			virtioISOPath = path
+		}
+		if osType == types.VirtualMachineCreateOsTypeWindows && virtioISOPath == "" {
+			warnings = append(warnings,
+				"Windows without a VirtIO drivers ISO: the installer will not see the "+
+					"virtio-scsi disk until the vioscsi driver is loaded from another source "+
+					"(attach the virtio-win ISO in the library to avoid this).")
 		}
 
-		// VNC console on an auto-generated unix socket (under
-		// /var/lib/libvirt/qemu/domain-*/): the web console dials it directly,
-		// and it is never exposed on the network.
-		graphics := `
-    <graphics type='vnc'>
-      <listen type='socket'/>
-    </graphics>
-    <video>
-      <model type='vga'/>
-    </video>`
+		// Host versions drive the Hyper-V enlightenment table (see
+		// domainxml.go). Best-effort: a failed probe means "very old host",
+		// which errs on the conservative side.
+		var caps hostFeatures
+		if v, err := c.GetVersion(); err == nil {
+			caps.QEMUVersion = v
+		} else {
+			slog.Warn("createVirtualMachine: could not probe QEMU version; assuming old host", "error", err.Error())
+		}
+		if v, err := c.GetLibVersion(); err == nil {
+			caps.LibvirtVersion = v
+		} else {
+			slog.Warn("createVirtualMachine: could not probe libvirt version; assuming old host", "error", err.Error())
+		}
 
-		domXML := fmt.Sprintf(`<domain type='kvm'>
-  <name>%s</name>
-  <memory unit='bytes'>%d</memory>
-  <vcpu>%d</vcpu>
-  <os>
-    <type arch='x86_64' machine='q35'>hvm</type>
-%s  </os>
-  <features><acpi/><apic/></features>
-  <clock offset='utc'/>
-  <on_poweroff>destroy</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>destroy</on_crash>
-  <devices>
-    <disk type='file' device='disk'>
-      <driver name='qemu' type='%s'/>
-      <source file='%s'/>
-      <target dev='vda' bus='virtio'/>%s
-    </disk>%s
-    <interface type='network'>
-      <source network='%s'/>
-      <model type='virtio'/>
-    </interface>
-    <console type='pty'/>%s
-  </devices>
-</domain>`, xmlEscape(req.Name), req.MemoryBytes, req.Vcpus, osBoot, format, xmlEscape(volPath), diskBootTag, cdrom, xmlEscape(*req.NetworkId), graphics)
+		spec := domainSpec{
+			Name:          req.Name,
+			MemoryBytes:   req.MemoryBytes,
+			Vcpus:         req.Vcpus,
+			OSType:        osType,
+			DiskPath:      volPath,
+			DiskFormat:    format,
+			NetworkId:     *req.NetworkId,
+			ISOPath:       isoPath,
+			VirtioISOPath: virtioISOPath,
+		}
+		domXML, profile, err := buildDomainXML(spec, caps)
+		if err != nil {
+			_ = vol.Delete(0)
+			return fmt.Errorf("build domain XML: %w", err)
+		}
+		if len(profile.SkippedEnlightenments) > 0 {
+			slog.Info("createVirtualMachine: hyper-v enlightenments skipped (unsupported by host)",
+				"vm", req.Name,
+				"qemuVersion", caps.QEMUVersion,
+				"libvirtVersion", caps.LibvirtVersion,
+				"skipped", profile.SkippedEnlightenments)
+		}
 		dom, err := c.DomainDefineXML(domXML)
 		if err != nil {
 			// Best-effort cleanup of the volume we just allocated.
@@ -241,7 +254,14 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 	if err != nil {
 		return types.VirtualMachine{}, err
 	}
-	return p.GetVirtualMachine(context.Background(), req.Name)
+	vm, err := p.GetVirtualMachine(context.Background(), req.Name)
+	if err != nil {
+		return types.VirtualMachine{}, err
+	}
+	if len(warnings) > 0 {
+		vm.Warnings = &warnings
+	}
+	return vm, nil
 }
 
 // xmlEscape escapes a string for embedding in XML attribute values.
@@ -385,6 +405,14 @@ func (p *Provider) domainToModel(dom *libvirt.Domain) (types.VirtualMachine, err
 		Vcpus:       dx.VCPU,
 		MemoryBytes: memBytes,
 		Os:          osNameFromXML(&dx),
+	}
+	// OS family and applied profile, detected from the domain XML (nil for
+	// domains that predate the profiles).
+	if ot := osTypeFromDomainXML(xmlStr); ot != "" {
+		vm.OsType = &ot
+	}
+	if _, profile := detectProfileFromDomainXML(xmlStr); profile != nil {
+		vm.PerformanceProfile = profile
 	}
 
 	for _, d := range dx.Disks {

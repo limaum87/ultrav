@@ -71,6 +71,10 @@ type vmState struct {
 	disks []types.Disk
 	// iso is the filename of the ISO attached as install media ("" = none).
 	iso string
+	// virtioISO is the VirtIO drivers ISO filename (windows profile; "" = none).
+	virtioISO string
+	// osType is the requested guest family ("" for pre-profile seed VMs).
+	osType types.VirtualMachineCreateOsType
 	// network is the virtual network the first NIC attaches to.
 	network string
 }
@@ -217,9 +221,23 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 	if req.Disk.Format != nil {
 		format = types.DiskFormat(*req.Disk.Format)
 	}
+	osType := types.VirtualMachineCreateOsTypeLinux
+	if req.OsType != nil && *req.OsType != "" {
+		osType = *req.OsType
+	}
 	bus := types.DiskBusVirtio
+	diskName := "vda"
+	if osType == types.VirtualMachineCreateOsTypeOther {
+		bus = types.DiskBusSata
+		diskName = "sda"
+	} else {
+		bus = types.DiskBusScsi
+		diskName = "sda"
+	}
 
 	st := &vmState{
+		osType:    osType,
+		virtioISO: deref(req.VirtioDriversIsoId),
 		spec: vmSpec{
 			id:     req.Name,
 			vcpus:  req.Vcpus,
@@ -232,7 +250,7 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		state: types.VMStateStopped,
 	}
 	st.disks = []types.Disk{{
-		Name:      "vda",
+		Name:      diskName,
 		Format:    format,
 		SizeBytes: req.Disk.SizeBytes,
 		Bus:       &bus,
@@ -243,7 +261,15 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		st.ipAddress = ip
 	}
 	p.vms[req.Name] = st
-	return p.toModel(st), nil
+	m := p.toModel(st)
+	if osType == types.VirtualMachineCreateOsTypeWindows && st.virtioISO == "" {
+		m.Warnings = &[]string{
+			"Windows without a VirtIO drivers ISO: the installer will not see the " +
+				"virtio-scsi disk until the vioscsi driver is loaded from another source " +
+				"(attach the virtio-win ISO in the library to avoid this).",
+		}
+	}
+	return m, nil
 }
 
 // StartVirtualMachine powers on a stopped VM.
@@ -404,6 +430,11 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		Os:          &vm.spec.os,
 		Disks:       vm.disks,
 	}
+	if vm.osType != "" {
+		ot := types.VirtualMachineOsType(vm.osType)
+		m.OsType = &ot
+		m.PerformanceProfile = mockPerformanceProfile(vm.osType)
+	}
 	if vm.iso != "" {
 		m.IsoId = &vm.iso
 	}
@@ -423,9 +454,13 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		used := int64(float64(d.SizeBytes) * (0.35 + stableFraction(vm.spec.id+d.Name)))
 		d.UsedBytes = &used
 	}
+	nicModel := types.NetworkInterfaceModelVirtio
+	if vm.osType == types.VirtualMachineCreateOsTypeOther {
+		nicModel = types.NetworkInterfaceModelE1000
+	}
 	m.NetworkInterfaces = []types.NetworkInterface{{
 		Name:       "ens3",
-		Model:      types.NetworkInterfaceModelVirtio,
+		Model:      nicModel,
 		MacAddress: &vm.spec.mac,
 		Network:    ptr(vm.networkOrDefault()),
 	}}
@@ -442,6 +477,43 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		m.Metrics = p.metricsFor(vm)
 	}
 	return m
+}
+
+// mockPerformanceProfile mirrors the profile the libvirt provider applies,
+// so the UI and handler tests exercise the same shapes without KVM.
+func mockPerformanceProfile(osType types.VirtualMachineCreateOsType) *types.PerformanceProfile {
+	if osType == types.VirtualMachineCreateOsTypeOther {
+		cpuMode := types.HostModel
+		bus := types.Sata
+		zero := 0
+		return &types.PerformanceProfile{
+			CpuMode:   &cpuMode,
+			DiskBus:   &bus,
+			IoThreads: &zero,
+		}
+	}
+	cpuMode := types.HostPassthrough
+	bus := types.Scsi
+	cache := types.None
+	one := 1
+	p := &types.PerformanceProfile{
+		CpuMode:   &cpuMode,
+		DiskBus:   &bus,
+		Cache:     &cache,
+		IoThreads: &one,
+	}
+	if osType == types.VirtualMachineCreateOsTypeWindows {
+		enlight := []string{"relaxed", "vapic", "spinlocks", "vpindex", "synic", "stimer", "runtime", "frequencies", "reset", "tlbflush", "ipi"}
+		p.HypervEnlightenments = &enlight
+	}
+	return p
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // metricsFor fabricates a plausible, live-feeling utilization snapshot for a
