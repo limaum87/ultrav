@@ -107,6 +107,11 @@ export function ConsolePanel({ vm }: { vm: VirtualMachine }) {
       <div className="console-toolbar">
         <span className={`console-dot console-dot-${status}`} />
         {status === 'connecting' ? 'Connecting to console…' : status === 'connected' ? 'Console connected' : 'Console disconnected — retrying…'}
+        {status === 'connected' && (
+          // Guests blank their display when idle; the VNC framebuffer is then
+          // genuinely black until the guest receives input.
+          <span className="console-hint">Black screen? Move the mouse or press a key to wake the VM.</span>
+        )}
       </div>
       <div ref={containerRef} className="console-screen" />
     </div>

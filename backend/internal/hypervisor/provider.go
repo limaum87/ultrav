@@ -36,7 +36,6 @@ type Provider interface {
 	RebootVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 	ForceStopVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 
-	// ListStoragePools(ctx context.Context) ([]types.StoragePool, error)
 	ListStoragePools(ctx context.Context) ([]types.StoragePool, error)
 	GetStoragePool(ctx context.Context, id string) (types.StoragePool, error)
 	CreateStoragePool(ctx context.Context, req types.StoragePoolCreate) (types.StoragePool, error)
@@ -53,14 +52,6 @@ type Provider interface {
 	// ListHostBridges returns Linux bridges configured on the host (e.g. br0),
 	// which bridge-mode virtual networks attach to.
 	ListHostBridges(ctx context.Context) ([]types.HostBridge, error)
-}
-
-// ScreenDumper is an optional provider capability: capture the VM's current
-// screen as a PPM (P6, maxval 255) image. The API layer uses it to bootstrap
-// the web console framebuffer on QEMU versions that never send the base
-// framebuffer to newly connected VNC clients (QEMU <= 4.2).
-type ScreenDumper interface {
-	ScreenDumpVM(ctx context.Context, id string) ([]byte, error)
 }
 
 var (
