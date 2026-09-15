@@ -77,6 +77,24 @@ const (
 	Nat      NetworkUpdateMode = "nat"
 )
 
+// Defines values for PerformanceProfileCache.
+const (
+	None PerformanceProfileCache = "none"
+)
+
+// Defines values for PerformanceProfileCpuMode.
+const (
+	Custom          PerformanceProfileCpuMode = "custom"
+	HostModel       PerformanceProfileCpuMode = "host-model"
+	HostPassthrough PerformanceProfileCpuMode = "host-passthrough"
+)
+
+// Defines values for PerformanceProfileDiskBus.
+const (
+	Sata PerformanceProfileDiskBus = "sata"
+	Scsi PerformanceProfileDiskBus = "scsi"
+)
+
 // Defines values for ReadinessHypervisor.
 const (
 	ReadinessHypervisorReady       ReadinessHypervisor = "ready"
@@ -127,6 +145,20 @@ const (
 	VMStateShuttingDown VMState = "shutting-down"
 	VMStateStarting     VMState = "starting"
 	VMStateStopped      VMState = "stopped"
+)
+
+// Defines values for VirtualMachineOsType.
+const (
+	VirtualMachineOsTypeLinux   VirtualMachineOsType = "linux"
+	VirtualMachineOsTypeOther   VirtualMachineOsType = "other"
+	VirtualMachineOsTypeWindows VirtualMachineOsType = "windows"
+)
+
+// Defines values for VirtualMachineCreateOsType.
+const (
+	VirtualMachineCreateOsTypeLinux   VirtualMachineCreateOsType = "linux"
+	VirtualMachineCreateOsTypeOther   VirtualMachineCreateOsType = "other"
+	VirtualMachineCreateOsTypeWindows VirtualMachineCreateOsType = "windows"
 )
 
 // Capabilities defines model for Capabilities.
@@ -358,6 +390,37 @@ type NetworkUpdate struct {
 // NetworkUpdateMode defines model for NetworkUpdate.Mode.
 type NetworkUpdateMode string
 
+// PerformanceProfile Performance-oriented settings applied to the domain XML at creation,
+// as detected from the domain (null for VMs created before profiles
+// existed).
+type PerformanceProfile struct {
+	// Cache Disk cache mode applied.
+	Cache *PerformanceProfileCache `json:"cache,omitempty"`
+
+	// CpuMode `<cpu mode>` applied. host-passthrough gives best performance but limits live migration between hosts with different CPUs (multi-host phase concern).
+	CpuMode *PerformanceProfileCpuMode `json:"cpuMode,omitempty"`
+
+	// DiskBus Disk bus applied (virtio-scsi for linux/windows profiles, SATA for other).
+	DiskBus *PerformanceProfileDiskBus `json:"diskBus,omitempty"`
+
+	// HypervEnlightenments Hyper-V enlightenments actually present in the domain XML (only
+	// for `windows`; only the ones supported by the host's
+	// QEMU/libvirt, as detected from domain capabilities).
+	HypervEnlightenments *[]string `json:"hypervEnlightenments,omitempty"`
+
+	// IoThreads Number of iothreads dedicated to the SCSI controller (0/absent when not applied, e.g. the `other` profile).
+	IoThreads *int `json:"ioThreads"`
+}
+
+// PerformanceProfileCache Disk cache mode applied.
+type PerformanceProfileCache string
+
+// PerformanceProfileCpuMode `<cpu mode>` applied. host-passthrough gives best performance but limits live migration between hosts with different CPUs (multi-host phase concern).
+type PerformanceProfileCpuMode string
+
+// PerformanceProfileDiskBus Disk bus applied (virtio-scsi for linux/windows profiles, SATA for other).
+type PerformanceProfileDiskBus string
+
 // Readiness defines model for Readiness.
 type Readiness struct {
 	Hypervisor ReadinessHypervisor `json:"hypervisor"`
@@ -457,6 +520,16 @@ type VirtualMachine struct {
 	NetworkInterfaces []NetworkInterface `json:"networkInterfaces"`
 	Os                *string            `json:"os,omitempty"`
 
+	// OsType Guest OS family detected from the domain XML (presence of Hyper-V
+	// enlightenments implies `windows`; VMs created before profiles
+	// existed may report `null`).
+	OsType *VirtualMachineOsType `json:"osType"`
+
+	// PerformanceProfile Performance-oriented settings applied to the domain XML at creation,
+	// as detected from the domain (null for VMs created before profiles
+	// existed).
+	PerformanceProfile *PerformanceProfile `json:"performanceProfile,omitempty"`
+
 	// State - running: powered on and operational
 	// - stopped: powered off
 	// - shutting-down: graceful shutdown in progress
@@ -464,7 +537,17 @@ type VirtualMachine struct {
 	State         VMState `json:"state"`
 	UptimeSeconds *int    `json:"uptimeSeconds"`
 	Vcpus         int     `json:"vcpus"`
+
+	// Warnings Non-fatal notices, populated only in the create response (e.g. a
+	// Windows VM created without a VirtIO drivers ISO). Absent/null on
+	// reads.
+	Warnings *[]string `json:"warnings"`
 }
+
+// VirtualMachineOsType Guest OS family detected from the domain XML (presence of Hyper-V
+// enlightenments implies `windows`; VMs created before profiles
+// existed may report `null`).
+type VirtualMachineOsType string
 
 // VirtualMachineCreate defines model for VirtualMachineCreate.
 type VirtualMachineCreate struct {
@@ -476,10 +559,25 @@ type VirtualMachineCreate struct {
 	Name        string  `json:"name"`
 	NetworkId   *string `json:"networkId,omitempty"`
 
+	// OsType Guest operating system family, selects the performance profile
+	// applied to the domain XML (see endpoint description).
+	OsType *VirtualMachineCreateOsType `json:"osType,omitempty"`
+
 	// Start Power on immediately after creation.
 	Start *bool `json:"start,omitempty"`
 	Vcpus int   `json:"vcpus"`
+
+	// VirtioDriversIsoId Optional VirtIO drivers ISO from the library (e.g.
+	// `virtio-win-0.1.266.iso`), attached as a second SATA CD-ROM for
+	// Windows installations. Only meaningful when `osType` is `windows`;
+	// ignored otherwise. Without it the Windows installer cannot see the
+	// virtio-scsi disk unless drivers are loaded from another source.
+	VirtioDriversIsoId *string `json:"virtioDriversIsoId"`
 }
+
+// VirtualMachineCreateOsType Guest operating system family, selects the performance profile
+// applied to the domain XML (see endpoint description).
+type VirtualMachineCreateOsType string
 
 // VirtualMachineList defines model for VirtualMachineList.
 type VirtualMachineList struct {

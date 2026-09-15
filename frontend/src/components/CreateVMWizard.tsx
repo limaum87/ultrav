@@ -109,6 +109,7 @@ export function CreateVMWizard({
             },
             networkId: form.networkId,
             isoId: form.isoId,
+            osType: 'linux',
             start: form.start,
           },
         }),

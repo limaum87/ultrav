@@ -440,6 +440,31 @@ export interface paths {
          *     storage pool and defines the domain (left stopped unless `start` is
          *     true). The VM is not booted from an OS image — attach installation
          *     media with virt-install/virt-manager afterwards if needed.
+         *
+         *     The `osType` selects a performance profile applied to the generated
+         *     domain XML:
+         *
+         *     - **linux** (default): virtio-scsi disk on an iothread-ed controller
+         *       (`cache='none'`, `io='native'`, `discard='unmap'`), virtio NIC with
+         *       vhost multi-queue, `cpu mode='host-passthrough'` (note: limits live
+         *       migration between hosts with different CPUs — relevant for the
+         *       future multi-host phase), guest agent channel, memballoon disabled,
+         *       catchup timers and a virtio RNG.
+         *     - **windows**: everything from the linux profile plus Hyper-V
+         *       enlightenments (relaxed, vapic, spinlocks, vpindex, synic, stimer,
+         *       runtime, frequencies, reset, tlbflush, ipi — only the ones supported
+         *       by the host's QEMU/libvirt are included), `clock offset='localtime'`
+         *       with hypervclock timer. If `virtioDriversIsoId` is set, the VirtIO
+         *       drivers ISO is attached as a second SATA CD-ROM so the Windows
+         *       installer can load `vioscsi`/`NetKVM`. Without it, creation still
+         *       succeeds but `warnings[]` in the response explains the installer
+         *       will not see the virtio-scsi disk.
+         *     - **other**: maximum compatibility — SATA disk, e1000e NIC,
+         *       `cpu mode='host-model'`, no enlightenments. Use for exotic guests or
+         *       a first boot of a converted VHDX without virtio drivers.
+         *
+         *     The applied profile is reported back in the returned VM's
+         *     `performanceProfile`.
          */
         post: operations["createVirtualMachine"];
         delete?: never;
@@ -943,6 +968,23 @@ export interface components {
              */
             isoId?: string | null;
             /**
+             * @description Guest operating system family, selects the performance profile
+             *     applied to the domain XML (see endpoint description).
+             * @default linux
+             * @example windows
+             * @enum {string}
+             */
+            osType: "linux" | "windows" | "other";
+            /**
+             * @description Optional VirtIO drivers ISO from the library (e.g.
+             *     `virtio-win-0.1.266.iso`), attached as a second SATA CD-ROM for
+             *     Windows installations. Only meaningful when `osType` is `windows`;
+             *     ignored otherwise. Without it the Windows installer cannot see the
+             *     virtio-scsi disk unless drivers are loaded from another source.
+             * @example virtio-win-0.1.266.iso
+             */
+            virtioDriversIsoId?: string | null;
+            /**
              * @description Power on immediately after creation.
              * @example false
              */
@@ -1109,6 +1151,68 @@ export interface components {
              * @example 2025-09-01T12:00:00Z
              */
             bootTime?: string | null;
+            /**
+             * @description Guest OS family detected from the domain XML (presence of Hyper-V
+             *     enlightenments implies `windows`; VMs created before profiles
+             *     existed may report `null`).
+             * @example windows
+             * @enum {string|null}
+             */
+            osType?: "linux" | "windows" | "other" | null;
+            performanceProfile?: components["schemas"]["PerformanceProfile"];
+            /**
+             * @description Non-fatal notices, populated only in the create response (e.g. a
+             *     Windows VM created without a VirtIO drivers ISO). Absent/null on
+             *     reads.
+             * @example [
+             *       "Windows without a VirtIO drivers ISO: the installer will not see the virtio-scsi disk until vioscsi is loaded from another source."
+             *     ]
+             */
+            warnings?: string[] | null;
+        };
+        /**
+         * @description Performance-oriented settings applied to the domain XML at creation,
+         *     as detected from the domain (null for VMs created before profiles
+         *     existed).
+         */
+        PerformanceProfile: {
+            /**
+             * @description `<cpu mode>` applied. host-passthrough gives best performance but limits live migration between hosts with different CPUs (multi-host phase concern).
+             * @example host-passthrough
+             * @enum {string}
+             */
+            cpuMode?: "host-passthrough" | "host-model" | "custom";
+            /**
+             * @description Disk bus applied (virtio-scsi for linux/windows profiles, SATA for other).
+             * @example scsi
+             * @enum {string}
+             */
+            diskBus?: "scsi" | "sata";
+            /**
+             * @description Disk cache mode applied.
+             * @example none
+             * @enum {string}
+             */
+            cache?: "none";
+            /**
+             * @description Number of iothreads dedicated to the SCSI controller (0/absent when not applied, e.g. the `other` profile).
+             * @example 1
+             */
+            ioThreads?: number | null;
+            /**
+             * @description Hyper-V enlightenments actually present in the domain XML (only
+             *     for `windows`; only the ones supported by the host's
+             *     QEMU/libvirt, as detected from domain capabilities).
+             * @example [
+             *       "relaxed",
+             *       "vapic",
+             *       "spinlocks",
+             *       "vpindex",
+             *       "synic",
+             *       "stimer"
+             *     ]
+             */
+            hypervEnlightenments?: string[];
         };
     };
     responses: {
