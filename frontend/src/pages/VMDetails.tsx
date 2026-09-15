@@ -430,8 +430,8 @@ function SettingsTab({ vm, onChanged }: { vm: VirtualMachine; onChanged: () => v
           <span>Memory (GiB)</span>
           <input
             type="number"
-            min={0.016}
-            step={0.5}
+            min={16 / 1024}
+            step="any"
             value={memoryGiB}
             onChange={(e) => setMemoryGiB(e.target.value)}
             disabled={!stopped || saving}
