@@ -1,0 +1,51 @@
+BOOT: server ver ok
+BOOT: server ver encaminhada, lendo client ver
+BOOT: client ver ok: RFB 003.008
+
+BOOT: client ver repassada ao QEMU
+BOOT: sec count ok: 1
+BOOT: sec types encaminhadas, lendo pick do cliente
+BOOT: pick recebido: 1
+panic: test timed out after 12s
+	running tests:
+		TestRunRFBBootstrapByteAccounting (12s)
+
+goroutine 27 [running]:
+testing.(*M).startAlarm.func1()
+	/usr/local/go/src/testing/testing.go:2373 +0x385
+created by time.goFunc
+	/usr/local/go/src/time/sleep.go:215 +0x2d
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc00012a820, {0x9216b8?, 0x0?}, 0x962630)
+	/usr/local/go/src/testing/testing.go:1751 +0x3ab
+testing.runTests.func1(0xc00012a820)
+	/usr/local/go/src/testing/testing.go:2168 +0x37
+testing.tRunner(0xc00012a820, 0xc00021fc70)
+	/usr/local/go/src/testing/testing.go:1690 +0xf4
+testing.runTests(0xc0000121e0, {0xcec300, 0x11, 0x11}, {0x470170?, 0x46fdda?, 0xcf3240?})
+	/usr/local/go/src/testing/testing.go:2166 +0x43d
+testing.(*M).Run(0xc0000190e0)
+	/usr/local/go/src/testing/testing.go:2034 +0x64a
+main.main()
+	_testmain.go:77 +0x9b
+
+goroutine 7 [select]:
+net.(*pipe).read(0xc000134480, {0xc0001db540, 0x20, 0x20?})
+	/usr/local/go/src/net/pipe.go:159 +0x155
+net.(*pipe).Read(0x40cc9f?, {0xc0001db540?, 0x8f8160?, 0x473c01?})
+	/usr/local/go/src/net/pipe.go:142 +0x1c
+io.ReadAtLeast({0x7fc6adbf2c18, 0xc000134480}, {0xc0001db540, 0x20, 0x20}, 0x20)
+	/usr/local/go/src/io/io.go:335 +0x90
+io.ReadFull(...)
+	/usr/local/go/src/io/io.go:354
+github.com/ultrav/ultrav/backend/internal/api.(*pipeClient).readFull(0xc0001e0280, 0x20)
+	/src/internal/api/console_bootstrap_test.go:21 +0x6f
+github.com/ultrav/ultrav/backend/internal/api.TestRunRFBBootstrapByteAccounting(0xc00012a9c0)
+	/src/internal/api/console_bootstrap_test.go:286 +0xef8
+testing.tRunner(0xc00012a9c0, 0x962630)
+	/usr/local/go/src/testing/testing.go:1690 +0xf4
+created by testing.(*T).Run in goroutine 1
+	/usr/local/go/src/testing/testing.go:1743 +0x390
+FAIL	github.com/ultrav/ultrav/backend/internal/api	12.021s
+FAIL

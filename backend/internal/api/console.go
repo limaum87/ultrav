@@ -55,6 +55,8 @@ func (s *Server) handleVMConsole(w http.ResponseWriter, r *http.Request) {
 	// connection is dropped and noVNC retries (ending up as a plain proxy).
 	if dumper, ok := s.provider.(hypervisor.ScreenDumper); ok {
 		if err := s.bootstrapConsoleFrame(ws, conn, dumper, r.Context(), id); err != nil {
+			s.log.Warn("console framebuffer bootstrap failed",
+				"vm", id, "err", err)
 			return
 		}
 	}
@@ -153,6 +155,13 @@ func (s *vncSource) readFull(n int) ([]byte, error) {
 	return buf, nil
 }
 
+// rfbClient is the browser side of the handshake (implemented by rfbWS over
+// the WebSocket, and by tests over plain pipes).
+type rfbClient interface {
+	readFull(n int) ([]byte, error)
+	write(b []byte) error
+}
+
 // bootstrapConsoleFrame transparently relays the fixed-size RFB handshake
 // between the browser (ws) and the VNC server (conn). Once the client has
 // negotiated its pixel format, it captures a screendump and injects a full
@@ -164,8 +173,15 @@ func (s *Server) bootstrapConsoleFrame(ws *websocket.Conn, conn net.Conn, dumper
 	defer conn.SetDeadline(time.Time{})
 
 	c := &rfbWS{ws: ws, ctx: ctx}
-	v := &vncSource{r: conn}
-	srv := func(b []byte) error { _, err := conn.Write(b); return err }
+	return runRFBBootstrap(c, conn, func() ([]byte, error) { return dumper.ScreenDumpVM(ctx, id) })
+}
+
+// runRFBBootstrap performs the RFB handshake relaying and injects the
+// screendump framebuffer. cli is the browser side; srvConn the VNC side.
+func runRFBBootstrap(cli rfbClient, srvConn net.Conn, dump func() ([]byte, error)) error {
+	c := cli
+	v := &vncSource{r: srvConn}
+	srv := func(b []byte) error { _, err := srvConn.Write(b); return err }
 
 	// ProtocolVersion: server then client (12 bytes each, "RFB xxx.yyy\n").
 	sv, err := v.readFull(12)
@@ -267,7 +283,7 @@ func (s *Server) bootstrapConsoleFrame(ws *websocket.Conn, conn net.Conn, dumper
 	bMax := binary.BigEndian.Uint16(pf[12:14])
 	rShift, gShift, bShift := pf[14], pf[15], pf[16]
 
-	ppm, err := dumper.ScreenDumpVM(ctx, id)
+	ppm, err := dump()
 	if err != nil {
 		return fmt.Errorf("screendump: %w", err)
 	}
