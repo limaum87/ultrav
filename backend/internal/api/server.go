@@ -70,6 +70,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/vms", s.handleListVMs)
 	mux.HandleFunc("POST /api/v1/vms", s.handleCreateVM)
 	mux.HandleFunc("GET /api/v1/vms/{id}", s.requireValidVMID(s.handleGetVM))
+	mux.HandleFunc("PATCH /api/v1/vms/{id}", s.requireValidVMID(s.handleUpdateVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/start", s.requireValidVMID(s.handleStartVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/shutdown", s.requireValidVMID(s.handleShutdownVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/reboot", s.requireValidVMID(s.handleRebootVM))
@@ -203,6 +204,40 @@ func validateCreateVM(req *types.VirtualMachineCreate) string {
 	}
 	if req.Disk.SizeBytes < 1024*1024 {
 		return "disk.sizeBytes must be at least 1 MiB"
+	}
+	return ""
+}
+
+// handleUpdateVM applies a partial settings update (vcpus, memoryBytes,
+// isoId) to a virtual machine.
+func (s *Server) handleUpdateVM(w http.ResponseWriter, r *http.Request) {
+	var req types.VirtualMachineUpdate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, r, CodeValidationError, "Invalid JSON body")
+		return
+	}
+	if msg := validateUpdateVM(&req); msg != "" {
+		s.writeError(w, r, CodeValidationError, msg)
+		return
+	}
+	vm, err := s.provider.UpdateVirtualMachine(r.Context(), r.PathValue("id"), req)
+	if err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, vm)
+}
+
+// validateUpdateVM enforces the contract constraints for PATCH /vms/{id}.
+func validateUpdateVM(req *types.VirtualMachineUpdate) string {
+	if req.Vcpus != nil && (*req.Vcpus < 1 || *req.Vcpus > 64) {
+		return "vcpus must be between 1 and 64"
+	}
+	if req.MemoryBytes != nil && *req.MemoryBytes < 16*1024*1024 {
+		return "memoryBytes must be at least 16 MiB"
+	}
+	if req.IsoId != nil && *req.IsoId != "" && !iso.ValidID.MatchString(*req.IsoId) {
+		return "isoId must be a valid ISO filename"
 	}
 	return ""
 }

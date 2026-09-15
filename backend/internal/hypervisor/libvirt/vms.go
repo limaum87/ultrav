@@ -384,6 +384,10 @@ func (p *Provider) domainToModel(dom *libvirt.Domain) (types.VirtualMachine, err
 	}
 
 	for _, d := range dx.Disks {
+		if d.Device == "cdrom" && d.Source.File != "" && vm.IsoId == nil {
+			iso := filepath.Base(d.Source.File)
+			vm.IsoId = &iso
+		}
 		if d.Device != "disk" {
 			continue
 		}

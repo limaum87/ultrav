@@ -419,11 +419,14 @@ type VMState string
 
 // VirtualMachine defines model for VirtualMachine.
 type VirtualMachine struct {
-	BootTime    *time.Time `json:"bootTime"`
-	Disks       []Disk     `json:"disks"`
-	Id          string     `json:"id"`
-	IpAddress   *string    `json:"ipAddress"`
-	MemoryBytes int64      `json:"memoryBytes"`
+	BootTime  *time.Time `json:"bootTime"`
+	Disks     []Disk     `json:"disks"`
+	Id        string     `json:"id"`
+	IpAddress *string    `json:"ipAddress"`
+
+	// IsoId Filename of the ISO currently attached as install media (CD-ROM), if any.
+	IsoId       *string `json:"isoId"`
+	MemoryBytes int64   `json:"memoryBytes"`
 
 	// Metrics Point-in-time resource utilization of a running virtual machine. The whole object is absent while the VM is not running. Individual fields are null when the host cannot report them (e.g. no balloon driver / guest agent, or a first sample with no previous sample to diff against). Values are computed by the hypervisor provider, which is allowed to keep a short-lived sampling cache per VM.
 	Metrics           *VmMetrics         `json:"metrics,omitempty"`
@@ -459,6 +462,14 @@ type VirtualMachineCreate struct {
 type VirtualMachineList struct {
 	Items []VirtualMachine `json:"items"`
 	Total int              `json:"total"`
+}
+
+// VirtualMachineUpdate Partial update of a VM's settings. Only provided fields are changed. vCPU and memory require the VM to be stopped. For isoId, a filename attaches/swaps the install media and an empty string detaches it.
+type VirtualMachineUpdate struct {
+	// IsoId ISO filename from the library to attach/swap; an empty string detaches the current ISO.
+	IsoId       *string `json:"isoId,omitempty"`
+	MemoryBytes *int64  `json:"memoryBytes,omitempty"`
+	Vcpus       *int    `json:"vcpus,omitempty"`
 }
 
 // VmMetrics Point-in-time resource utilization of a running virtual machine. The whole object is absent while the VM is not running. Individual fields are null when the host cannot report them (e.g. no balloon driver / guest agent, or a first sample with no previous sample to diff against). Values are computed by the hypervisor provider, which is allowed to keep a short-lived sampling cache per VM.
@@ -534,3 +545,6 @@ type ResetUserPasswordJSONRequestBody = UpdatePasswordRequest
 
 // CreateVirtualMachineJSONRequestBody defines body for CreateVirtualMachine for application/json ContentType.
 type CreateVirtualMachineJSONRequestBody = VirtualMachineCreate
+
+// UpdateVirtualMachineJSONRequestBody defines body for UpdateVirtualMachine for application/json ContentType.
+type UpdateVirtualMachineJSONRequestBody = VirtualMachineUpdate

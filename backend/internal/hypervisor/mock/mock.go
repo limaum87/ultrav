@@ -69,6 +69,8 @@ type vmState struct {
 	// disks overrides the disk list derived from spec (used by created VMs);
 	// nil means "derive from spec".
 	disks []types.Disk
+	// iso is the filename of the ISO attached as install media ("" = none).
+	iso string
 }
 
 // Provider is an in-memory simulated KVM host.
@@ -318,6 +320,33 @@ func (p *Provider) ForceStopVirtualMachine(_ context.Context, id string) (types.
 	return p.toModel(vm), nil
 }
 
+// UpdateVirtualMachine changes VM settings: vcpus, memoryBytes and isoId.
+// vCPU/memory require the VM to be stopped; the ISO can be swapped anytime
+// (the mock simply records it — there is no real CD-ROM to attach).
+func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.VirtualMachineUpdate) (types.VirtualMachine, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	vm, err := p.getLocked(id)
+	if err != nil {
+		return types.VirtualMachine{}, err
+	}
+	needsStop := req.Vcpus != nil || req.MemoryBytes != nil
+	if needsStop && vm.state != types.VMStateStopped {
+		return types.VirtualMachine{}, fmt.Errorf("%w: vCPU and memory changes require the virtual machine to be stopped", hypervisor.ErrInvalidVMState)
+	}
+	if req.Vcpus != nil {
+		vm.spec.vcpus = *req.Vcpus
+	}
+	if req.MemoryBytes != nil {
+		vm.spec.memory = *req.MemoryBytes
+	}
+	if req.IsoId != nil {
+		vm.iso = *req.IsoId
+	}
+	return p.toModel(vm), nil
+}
+
 // --- internal helpers (p.mu must be held) ---
 
 func (p *Provider) getLocked(id string) (*vmState, error) {
@@ -351,6 +380,9 @@ func (p *Provider) toModel(vm *vmState) types.VirtualMachine {
 		MemoryBytes: vm.spec.memory,
 		Os:          &vm.spec.os,
 		Disks:       vm.disks,
+	}
+	if vm.iso != "" {
+		m.IsoId = &vm.iso
 	}
 	if vm.disks == nil {
 		m.Disks = []types.Disk{{

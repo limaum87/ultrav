@@ -449,7 +449,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update virtual machine settings
+         * @description Changes the VM's hardware configuration: vCPU count, memory size and the attached ISO (install media). Only the fields present in the body are changed (partial update). vCPU and memory changes require the VM to be stopped; the ISO can be swapped in any state and takes effect on the next boot.
+         */
+        patch: operations["updateVirtualMachine"];
         trace?: never;
     };
     "/vms/{id}/start": {
@@ -909,6 +913,21 @@ export interface components {
              */
             start?: boolean;
         };
+        /** @description Partial update of a VM's settings. Only provided fields are changed. vCPU and memory require the VM to be stopped. For isoId, a filename attaches/swaps the install media and an empty string detaches it. */
+        VirtualMachineUpdate: {
+            /** @example 4 */
+            vcpus?: number;
+            /**
+             * Format: int64
+             * @example 8589934592
+             */
+            memoryBytes?: number;
+            /**
+             * @description ISO filename from the library to attach/swap; an empty string detaches the current ISO.
+             * @example ubuntu-24.04-live-server.iso
+             */
+            isoId?: string;
+        };
         DiskCreate: {
             /** @example default */
             poolId: string;
@@ -1036,6 +1055,11 @@ export interface components {
             os?: string;
             /** @example 10.0.0.11 */
             ipAddress?: string | null;
+            /**
+             * @description Filename of the ISO currently attached as install media (CD-ROM), if any.
+             * @example ubuntu-24.04-live-server.iso
+             */
+            isoId?: string | null;
             disks: components["schemas"]["Disk"][];
             networkInterfaces: components["schemas"]["NetworkInterface"][];
             metrics?: components["schemas"]["VmMetrics"];
@@ -2110,6 +2134,44 @@ export interface operations {
                 };
             };
             404: components["responses"]["VMNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateVirtualMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Virtual machine identifier (name). */
+                id: components["parameters"]["VMId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "vcpus": 4,
+                 *       "memoryBytes": 8589934592,
+                 *       "isoId": ""
+                 *     }
+                 */
+                "application/json": components["schemas"]["VirtualMachineUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated virtual machine */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualMachine"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            404: components["responses"]["VMNotFound"];
+            409: components["responses"]["VMInvalidState"];
             500: components["responses"]["InternalError"];
         };
     };

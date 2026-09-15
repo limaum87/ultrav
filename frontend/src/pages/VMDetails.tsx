@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, unwrap, ApiError, type VirtualMachine } from '../api/client';
+import type { components } from '../api/schema';
 import { formatBytes, formatRate, formatUptime, usePolling } from '../lib/hooks';
 import {
   ActionMenu,
@@ -23,6 +24,9 @@ import {
 } from 'lucide-react';
 
 type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
+
+type IsoList = components['schemas']['IsoList'];
+const GiB = 1024 * 1024 * 1024;
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Monitor },
@@ -141,7 +145,7 @@ export default function VMDetails() {
       {tab === 'hardware' && <Hardware vm={vm} />}
       {tab === 'disks' && <Disks vm={vm} />}
       {tab === 'network' && <NetworkTab vm={vm} />}
-      {tab === 'settings' && <SettingsTab vm={vm} />}
+      {tab === 'settings' && <SettingsTab vm={vm} onChanged={() => void refresh()} />}
 
       <ConfirmDialog
         open={confirm === 'stop'}
@@ -352,14 +356,107 @@ function NetworkTab({ vm }: { vm: VirtualMachine }) {
   );
 }
 
-function SettingsTab({ vm }: { vm: VirtualMachine }) {
+function SettingsTab({ vm, onChanged }: { vm: VirtualMachine; onChanged: () => void }) {
+  const toast = useToast();
+  const [vcpus, setVcpus] = useState(String(vm.vcpus));
+  const [memoryGiB, setMemoryGiB] = useState(String(+(vm.memoryBytes / GiB).toFixed(2)));
+  const [isoId, setIsoId] = useState<string>(vm.isoId ?? '');
+  const [isos, setIsos] = useState<IsoList | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    unwrap(api.GET('/storage/isos'))
+      .then(setIsos)
+      .catch(() => setIsos({ items: [], total: 0 }));
+  }, []);
+
+  const vcpusNum = Number(vcpus);
+  const memoryBytes = Math.round(Number(memoryGiB) * GiB);
+  const hardwareDirty = vcpusNum !== vm.vcpus || memoryBytes !== vm.memoryBytes;
+  const isoDirty = isoId !== (vm.isoId ?? '');
+  const valid =
+    Number.isFinite(vcpusNum) && vcpusNum >= 1 && vcpusNum <= 64 &&
+    Number.isFinite(memoryBytes) && memoryBytes >= 16 * 1024 * 1024;
+  const stopped = vm.state === 'stopped';
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const body: components['schemas']['VirtualMachineUpdate'] = {};
+      if (hardwareDirty) {
+        if (vcpusNum !== vm.vcpus) body.vcpus = vcpusNum;
+        if (memoryBytes !== vm.memoryBytes) body.memoryBytes = memoryBytes;
+      }
+      if (isoDirty) body.isoId = isoId;
+      await unwrap(api.PATCH('/vms/{id}', { params: { path: { id: vm.id } }, body }));
+      toast.push('success', `${vm.name}: settings updated${!stopped && (hardwareDirty || isoDirty) ? ' (applies on next boot)' : ''}`);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code} — ${e.message}` : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="card">
-      <EmptyState
-        title="Settings"
-        message="Editing VM hardware configuration (vCPU, memory, disks) is not supported by the API yet."
-        action={<KV k="Identifier" v={<span className="mono">{vm.id}</span>} />}
-      />
+    <div className="card" style={{ maxWidth: 560, padding: 20 }}>
+      <h2 className="card-title">VM settings</h2>
+      {!stopped && (
+        <div className="alert" style={{ marginBottom: 12 }}>
+          vCPU and memory can only be changed while the VM is stopped. ISO changes apply on the next boot.
+        </div>
+      )}
+      {error && <div className="alert error">{error}</div>}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) void save();
+        }}
+      >
+        <label className="field">
+          <span>vCPUs</span>
+          <input
+            type="number"
+            min={1}
+            max={64}
+            value={vcpus}
+            onChange={(e) => setVcpus(e.target.value)}
+            disabled={!stopped || saving}
+          />
+        </label>
+        <label className="field">
+          <span>Memory (GiB)</span>
+          <input
+            type="number"
+            min={0.016}
+            step={0.5}
+            value={memoryGiB}
+            onChange={(e) => setMemoryGiB(e.target.value)}
+            disabled={!stopped || saving}
+          />
+        </label>
+        <label className="field">
+          <span>Install media (ISO)</span>
+          <select value={isoId} onChange={(e) => setIsoId(e.target.value)} disabled={saving}>
+            <option value="">— No ISO attached —</option>
+            {(isos?.items ?? []).map((iso) => (
+              <option key={iso.id} value={iso.id}>
+                {iso.fileName} ({formatBytes(iso.sizeBytes, 1)})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-primary" type="submit" disabled={!valid || saving || (!hardwareDirty && !isoDirty)}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+          {!stopped && hardwareDirty && (
+            <span className="cell-sub">Stop the VM to edit vCPU / memory</span>
+          )}
+        </div>
+      </form>
     </div>
   );
 }

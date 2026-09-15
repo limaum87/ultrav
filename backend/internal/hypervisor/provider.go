@@ -35,6 +35,12 @@ type Provider interface {
 	ShutdownVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 	RebootVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
 	ForceStopVirtualMachine(ctx context.Context, id string) (types.VirtualMachine, error)
+	// UpdateVirtualMachine changes VM settings (vcpus, memoryBytes, isoId).
+	// Only provided fields are changed. vCPU/memory changes require the VM to
+	// be stopped (ErrInvalidVMState otherwise); the ISO can be swapped in any
+	// state and applies on the next boot. Returns ErrVMNotFound,
+	// ErrInvalidVMState or ErrIsoNotFound.
+	UpdateVirtualMachine(ctx context.Context, id string, req types.VirtualMachineUpdate) (types.VirtualMachine, error)
 
 	ListStoragePools(ctx context.Context) ([]types.StoragePool, error)
 	GetStoragePool(ctx context.Context, id string) (types.StoragePool, error)

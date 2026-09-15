@@ -462,3 +462,75 @@ func TestListHostBridges(t *testing.T) {
 		t.Errorf("bridges: %d %v", res.StatusCode, body)
 	}
 }
+
+func patchJSON(t *testing.T, s *Server, path string, payload any) (*http.Response, map[string]any) {
+	t.Helper()
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewReader(b))
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res := rec.Result()
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	return res, body
+}
+
+func TestUpdateVirtualMachine(t *testing.T) {
+	s := testServer(t)
+
+	// vCPU + memory + ISO on a stopped VM.
+	res, body := patchJSON(t, s, "/api/v1/vms/monitoring01", map[string]any{
+		"vcpus":       4,
+		"memoryBytes": 8 * 1024 * 1024 * 1024,
+		"isoId":       "ubuntu-24.04-live-server.iso",
+	})
+	if res.StatusCode != 200 {
+		t.Fatalf("status %d: %v", res.StatusCode, body)
+	}
+	if body["vcpus"] != float64(4) {
+		t.Errorf("vcpus = %v", body["vcpus"])
+	}
+	if body["memoryBytes"] != float64(8*1024*1024*1024) {
+		t.Errorf("memoryBytes = %v", body["memoryBytes"])
+	}
+	if body["isoId"] != "ubuntu-24.04-live-server.iso" {
+		t.Errorf("isoId = %v", body["isoId"])
+	}
+
+	// Detach the ISO with an empty string.
+	res, body = patchJSON(t, s, "/api/v1/vms/monitoring01", map[string]any{"isoId": ""})
+	if res.StatusCode != 200 || body["isoId"] != nil {
+		t.Errorf("detach: %d %v", res.StatusCode, body["isoId"])
+	}
+
+	// vCPU change on a running VM is rejected with 409.
+	res, body = patchJSON(t, s, "/api/v1/vms/erp01", map[string]any{"vcpus": 8})
+	if res.StatusCode != 409 {
+		t.Errorf("running change: expected 409, got %d", res.StatusCode)
+	}
+	if code := body["error"].(map[string]any)["code"]; code != "VM_INVALID_STATE" {
+		t.Errorf("error code = %v", code)
+	}
+
+	// ISO-only swap is allowed on a running VM.
+	res, _ = patchJSON(t, s, "/api/v1/vms/erp01", map[string]any{"isoId": "ubuntu-24.04-live-server.iso"})
+	if res.StatusCode != 200 {
+		t.Errorf("running iso swap: %d", res.StatusCode)
+	}
+
+	// Validation errors.
+	res, body = patchJSON(t, s, "/api/v1/vms/monitoring01", map[string]any{"vcpus": 999})
+	if res.StatusCode != 400 {
+		t.Errorf("vcpus validation: %d", res.StatusCode)
+	}
+	res, _ = patchJSON(t, s, "/api/v1/vms/monitoring01", map[string]any{"memoryBytes": 1024})
+	if res.StatusCode != 400 {
+		t.Errorf("memory validation: %d", res.StatusCode)
+	}
+
+	// Unknown VM.
+	res, _ = patchJSON(t, s, "/api/v1/vms/nope", map[string]any{"vcpus": 2})
+	if res.StatusCode != 404 {
+		t.Errorf("not found: %d", res.StatusCode)
+	}
+}

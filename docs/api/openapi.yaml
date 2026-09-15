@@ -622,6 +622,33 @@ paths:
               schema: { $ref: '#/components/schemas/VirtualMachine' }
         '404': { $ref: '#/components/responses/VMNotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      operationId: updateVirtualMachine
+      tags: [Virtual Machines]
+      summary: Update virtual machine settings
+      description: >
+        Changes the VM's hardware configuration: vCPU count, memory size and
+        the attached ISO (install media). Only the fields present in the body
+        are changed (partial update). vCPU and memory changes require the VM
+        to be stopped; the ISO can be swapped in any state and takes effect on
+        the next boot.
+      parameters: [ { $ref: '#/components/parameters/VMId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VirtualMachineUpdate' }
+            example: { vcpus: 4, memoryBytes: 8589934592, isoId: '' }
+      responses:
+        '200':
+          description: Updated virtual machine
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VirtualMachine' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /vms/{id}/start:
     post:
@@ -1068,6 +1095,28 @@ components:
           example: ubuntu-24.04-live-server.iso
         start: { type: boolean, description: Power on immediately after creation., example: false }
 
+    VirtualMachineUpdate:
+      type: object
+      description: >
+        Partial update of a VM's settings. Only provided fields are changed.
+        vCPU and memory require the VM to be stopped. For isoId, a filename
+        attaches/swaps the install media and an empty string detaches it.
+      properties:
+        vcpus:
+          type: integer
+          minimum: 1
+          maximum: 64
+          example: 4
+        memoryBytes:
+          type: integer
+          format: int64
+          minimum: 16777216
+          example: 8589934592
+        isoId:
+          type: string
+          description: ISO filename from the library to attach/swap; an empty string detaches the current ISO.
+          example: ubuntu-24.04-live-server.iso
+
     DiskCreate:
       type: object
       required: [poolId, sizeBytes]
@@ -1191,6 +1240,11 @@ components:
         uptimeSeconds: { type: integer, nullable: true, example: 345600 }
         os: { type: string, example: Ubuntu 24.04 LTS }
         ipAddress: { type: string, nullable: true, example: 10.0.0.11 }
+        isoId:
+          type: string
+          nullable: true
+          description: Filename of the ISO currently attached as install media (CD-ROM), if any.
+          example: ubuntu-24.04-live-server.iso
         disks:
           type: array
           items: { $ref: '#/components/schemas/Disk' }
