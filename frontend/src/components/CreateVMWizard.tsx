@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, unwrap, ApiError, type StoragePool, type Network, type Iso } from '../api/client';
+import { useToast } from './Toast';
 import { formatBytes } from '../lib/hooks';
 import { Monitor, Check, X, Rocket } from 'lucide-react';
 
@@ -15,6 +16,8 @@ type Form = {
   format: 'qcow2' | 'raw';
   networkId: string;
   isoId: string | null;
+  osType: 'linux' | 'windows' | 'other';
+  virtioDriversIsoId: string | null;
   start: boolean;
 };
 
@@ -44,8 +47,11 @@ export function CreateVMWizard({
     format: 'qcow2',
     networkId: 'default',
     isoId: null,
+    osType: 'linux',
+    virtioDriversIsoId: null,
     start: false,
   });
+  const toast = useToast();
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -96,7 +102,7 @@ export function CreateVMWizard({
     setSubmitting(true);
     setError(null);
     try {
-      await unwrap(
+      const created = await unwrap(
         api.POST('/vms', {
           body: {
             name: form.name,
@@ -109,12 +115,16 @@ export function CreateVMWizard({
             },
             networkId: form.networkId,
             isoId: form.isoId,
-            osType: 'linux',
+            osType: form.osType,
+            ...(form.osType === 'windows' ? { virtioDriversIsoId: form.virtioDriversIsoId } : {}),
             start: form.start,
           },
         }),
       );
       onCreated();
+      for (const w of created?.warnings ?? []) {
+        toast.push('info', w);
+      }
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? `${e.code}: ${e.message}` : String(e));
@@ -297,6 +307,35 @@ export function CreateVMWizard({
                   The ISO is attached as a SATA CD-ROM and set as the first boot device,
                   so the VM boots into the installer. You can eject it after install.
                 </p>
+              )}
+              {form.osType === 'windows' && (
+                <>
+                  <label className="field">
+                    <span>VirtIO drivers ISO (Windows)</span>
+                    <select
+                      value={form.virtioDriversIsoId ?? ''}
+                      onChange={(e) => set('virtioDriversIsoId', e.target.value || null)}
+                      disabled={submitting}
+                    >
+                      <option value="">None — installer will not see the virtio disk</option>
+                      {isos
+                        .filter((iso) => iso.fileName.toLowerCase().includes('virtio'))
+                        .map((iso) => (
+                          <option key={iso.id} value={iso.id}>
+                            {iso.fileName} ({formatBytes(iso.sizeBytes, 0)})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <p className="wiz-hint">
+                    Without the drivers ISO the Windows installer cannot see the virtio-scsi
+                    disk. Download the stable virtio-win ISO from{' '}
+                    <a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/" target="_blank" rel="noreferrer">
+                      fedorapeople (virtio-win stable)
+                    </a>{' '}
+                    and upload it in Storage → ISO Library. It is attached as a second CD-ROM.
+                  </p>
+                </>
               )}
             </div>
           )}

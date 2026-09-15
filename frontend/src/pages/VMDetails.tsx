@@ -249,6 +249,7 @@ function Overview({ vm }: { vm: VirtualMachine }) {
           <KV k="Boot Time" v={vm.bootTime ? new Date(vm.bootTime).toLocaleString() : '—'} />
         </InfoCard>
         <InfoCard title="System">
+          <KV k="Operating system type" v={vm.osType ?? '—'} />
           <KV k="vCPU" v={vm.vcpus} />
           <KV
             k="Memory"
@@ -280,7 +281,47 @@ function Overview({ vm }: { vm: VirtualMachine }) {
           {vm.disks.length === 0 && <div className="cell-sub">No disks attached</div>}
         </InfoCard>
       </section>
+      <PerformanceProfileCard vm={vm} />
     </>
+  );
+}
+
+function PerformanceProfileCard({ vm }: { vm: VirtualMachine }) {
+  const p = vm.performanceProfile;
+  if (!p) {
+    return (
+      <section className="grid-2">
+        <InfoCard title="Performance Profile">
+          <div className="cell-sub">
+            No performance profile (VM created before per-OS profiles existed).
+          </div>
+        </InfoCard>
+      </section>
+    );
+  }
+  return (
+    <section className="grid-2">
+      <InfoCard title="Performance Profile">
+        <KV k="OS type" v={vm.osType ?? '—'} />
+        <KV k="CPU mode" v={p.cpuMode ?? '—'} />
+        <KV k="Disk bus" v={p.diskBus ?? '—'} />
+        <KV k="Disk cache" v={p.cache ?? '—'} />
+        <KV k="IO threads" v={p.ioThreads ? String(p.ioThreads) : '—'} />
+      </InfoCard>
+      <InfoCard title="Hyper-V Enlightenments">
+        {p.hypervEnlightenments && p.hypervEnlightenments.length > 0 ? (
+          p.hypervEnlightenments.map((e) => (
+            <KV key={e} k={e} v="on" />
+          ))
+        ) : (
+          <div className="cell-sub">
+            {vm.osType === 'windows'
+              ? 'None applied (limited host capabilities).'
+              : 'Not applicable (Linux profile).'}
+          </div>
+        )}
+      </InfoCard>
+    </section>
   );
 }
 
