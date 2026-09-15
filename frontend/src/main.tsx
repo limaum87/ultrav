@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import VirtualMachines from './pages/VirtualMachines';
 import VMDetails from './pages/VMDetails';
+import ConsoleFullscreen from './pages/ConsoleFullscreen';
 import ComingSoon from './pages/ComingSoon';
 import Storage from './pages/Storage';
 import NetworkPage from './pages/Network';
@@ -19,6 +20,8 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* Fullscreen console: own tab, no app shell (sidebar/topbar). */}
+          <Route path="/vms/:id/console" element={<ConsoleFullscreen />} />
           <Route element={<App />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/vms" element={<VirtualMachines />} />

@@ -119,8 +119,8 @@ export default function VMDetails() {
           <button
             className="btn btn-with-icon"
             disabled={vm.state !== 'running'}
-            onClick={() => setTab('console')}
-            title={vm.state === 'running' ? 'Open the graphical console' : 'Console requires a running VM'}
+            onClick={() => window.open(`/vms/${encodeURIComponent(vm.id)}/console`, '_blank', 'noopener')}
+            title={vm.state === 'running' ? 'Open the graphical console in a new tab' : 'Console requires a running VM'}
           >
             <SquareTerminal size={14} strokeWidth={2} aria-hidden /> Open Console
           </button>

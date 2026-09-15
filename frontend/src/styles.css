@@ -995,6 +995,32 @@ tr.row-busy { opacity: 0.55; }
 }
 @keyframes pulse { 50% { opacity: 0.35; } }
 
+/* --- fullscreen console (own browser tab, no app shell) --- */
+.console-fullscreen {
+  display: flex; flex-direction: column;
+  height: 100vh; background: #000;
+}
+.console-full-toolbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-elev2); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.console-full-back { text-decoration: none; }
+.console-full-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.console-full-body {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px;
+}
+.console-full-body .console-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.console-full-body .console-screen { flex: 1; min-height: 0; }
+.console-full-center {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim); font-size: 14px;
+}
+
 /* ---------- login page ---------- */
 .login-page {
   min-height: 100vh;
