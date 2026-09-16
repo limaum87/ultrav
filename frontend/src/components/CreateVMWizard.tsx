@@ -182,6 +182,21 @@ export function CreateVMWizard({
                   disabled={submitting}
                 />
               </label>
+              <label className="field">
+                <span>Operating system</span>
+                <select
+                  value={form.osType}
+                  onChange={(e) => {
+                    const v = e.target.value as Form['osType'];
+                    setForm((f) => ({ ...f, osType: v, virtioDriversIsoId: v === 'windows' ? f.virtioDriversIsoId : null }));
+                  }}
+                  disabled={submitting}
+                >
+                  <option value="linux">Linux</option>
+                  <option value="windows">Windows</option>
+                  <option value="other">Other (max compatibility)</option>
+                </select>
+              </label>
               <div className="wiz-row">
                 <label className="field">
                   <span>vCPUs</span>
