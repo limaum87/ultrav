@@ -372,6 +372,68 @@ func (p *Provider) ForceStopVirtualMachine(_ context.Context, id string) (types.
 	return p.GetVirtualMachine(context.Background(), id)
 }
 
+// DeleteVirtualMachine undefines the domain; when deleteDisks is true the
+// backing disk volumes are deleted from their pool as well. The VM must be
+// stopped. CD-ROM / ISO media is never touched.
+func (p *Provider) DeleteVirtualMachine(_ context.Context, id string, deleteDisks bool) error {
+	return p.withConn(func(c *libvirt.Connect) error {
+		dom, err := c.LookupDomainByName(id)
+		if err != nil {
+			return hypervisor.ErrVMNotFound
+		}
+		defer dom.Free()
+
+		state, _, err := dom.GetState()
+		if err != nil {
+			return err
+		}
+		if state != libvirt.DOMAIN_SHUTOFF && state != libvirt.DOMAIN_SHUTDOWN && state != libvirt.DOMAIN_CRASHED {
+			return fmt.Errorf("%w: cannot delete a virtual machine that is not stopped", hypervisor.ErrInvalidVMState)
+		}
+
+		// Collect backing file paths before undefining (the XML is gone after).
+		var diskPaths []string
+		if deleteDisks {
+			xmlStr, err := dom.GetXMLDesc(0)
+			if err != nil {
+				return err
+			}
+			var dx domainXML
+			if err := xml.Unmarshal([]byte(xmlStr), &dx); err != nil {
+				return err
+			}
+			for _, d := range dx.Disks {
+				if d.Device == "disk" && d.Source.File != "" {
+					diskPaths = append(diskPaths, d.Source.File)
+				}
+			}
+		}
+
+		if err := dom.UndefineFlags(libvirt.DOMAIN_UNDEFINE_MANAGED_SAVE | libvirt.DOMAIN_UNDEFINE_SNAPSHOTS_METADATA | libvirt.DOMAIN_UNDEFINE_NVRAM); err != nil {
+			// Older libvirt may reject the flag set; fall back to plain undefine.
+			if err2 := dom.Undefine(); err2 != nil {
+				return fmt.Errorf("undefine domain: %w", err2)
+			}
+			slog.Warn("deleteVirtualMachine: full undefine flag set unsupported; used plain undefine", "vm", id, "error", err.Error())
+		}
+
+		for _, path := range diskPaths {
+			vol, err := c.LookupStorageVolByPath(path)
+			if err != nil {
+				slog.Warn("deleteVirtualMachine: disk volume not found in any pool; skipped",
+					"vm", id, "path", path)
+				continue
+			}
+			if err := vol.Delete(0); err != nil {
+				vol.Free()
+				return fmt.Errorf("delete volume %s: %w", path, err)
+			}
+			vol.Free()
+		}
+		return nil
+	})
+}
+
 // domainToModel converts one libvirt domain into the API model. Disk allocation
 // and memory usage are resolved best-effort; IPs via the QEMU guest agent when
 // available; live utilization via the provider's sampling cache.

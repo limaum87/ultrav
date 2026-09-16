@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, unwrap, ApiError, type VirtualMachine } from '../api/client';
 import type { components } from '../api/schema';
 import { formatBytes, formatRate, formatUptime, usePolling } from '../lib/hooks';
@@ -44,10 +44,11 @@ const TABS = [
 
 export default function VMDetails() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const toast = useToast();
   const [tab, setTab] = useState('overview');
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<PowerAction | null>(null);
+  const [confirm, setConfirm] = useState<PowerAction | 'delete' | 'delete-disks' | null>(null);
   const { data: vm, error, loading, refresh } = usePolling(async () =>
     unwrap(api.GET('/vms/{id}', { params: { path: { id } } })),
   );
@@ -67,6 +68,22 @@ export default function VMDetails() {
       }
     },
     [id, refresh, toast, vm?.name],
+  );
+
+  const deleteVM = useCallback(
+    async (deleteDisks: boolean) => {
+      setBusy(true);
+      try {
+        await unwrap(api.DELETE('/vms/{id}', { params: { path: { id }, query: { deleteDisks } } }));
+        toast.push('success', `${vm?.name ?? id}: deleted${deleteDisks ? ' (disks removed)' : ''}`);
+        navigate('/vms');
+      } catch (e) {
+        toast.push('error', e instanceof ApiError ? `${e.code} — ${e.message}` : String(e));
+        setBusy(false);
+        setConfirm(null);
+      }
+    },
+    [id, toast, vm?.name, navigate],
   );
 
   if (loading && !vm) {
@@ -93,8 +110,8 @@ export default function VMDetails() {
   const menu: MenuItem[] = [
     { label: 'Force Stop', icon: mi(OctagonX), danger: true, onSelect: () => setConfirm('stop'), disabled: busy || !running, title: 'Pull the power cable — data loss possible' },
     { kind: 'separator' },
-    // TODO(backend): no DELETE /vms/{id} endpoint yet.
-    { label: 'Delete', icon: mi(Trash2), danger: true, disabled: true, title: 'VM deletion is not available yet' },
+    { label: 'Delete (keep disks)', icon: mi(Trash2), danger: true, onSelect: () => setConfirm('delete'), disabled: busy || running, title: running ? 'VM must be stopped to delete' : 'Remove the VM configuration; disk volumes stay in the pool' },
+    { label: 'Delete + disks', icon: mi(Trash2), danger: true, onSelect: () => setConfirm('delete-disks'), disabled: busy || running, title: running ? 'VM must be stopped to delete' : 'Remove the VM configuration AND delete its disk volumes' },
   ];
 
   return (
@@ -156,6 +173,26 @@ export default function VMDetails() {
         busy={busy}
         onCancel={() => setConfirm(null)}
         onConfirm={() => void runAction('stop')}
+      />
+
+      <ConfirmDialog
+        open={confirm === 'delete'}
+        title={`Delete "${vm.name}"?`}
+        message={<>The virtual machine definition will be removed. Its <strong>disk volumes remain</strong> in the storage pool and can be reclaimed manually. Use “Delete + disks” to free the space.</>}
+        confirmLabel="Delete VM"
+        busy={busy}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => void deleteVM(false)}
+      />
+
+      <ConfirmDialog
+        open={confirm === 'delete-disks'}
+        title={`Delete "${vm.name}" and its disks?`}
+        message={<>The virtual machine <strong>and all of its disk volumes</strong> will be permanently deleted. This frees the storage space and <strong>cannot be undone</strong>.</>}
+        confirmLabel="Delete + Disks"
+        busy={busy}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => void deleteVM(true)}
       />
     </div>
   );

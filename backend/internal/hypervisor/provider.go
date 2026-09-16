@@ -41,6 +41,11 @@ type Provider interface {
 	// state and applies on the next boot. Returns ErrVMNotFound,
 	// ErrInvalidVMState or ErrIsoNotFound.
 	UpdateVirtualMachine(ctx context.Context, id string, req types.VirtualMachineUpdate) (types.VirtualMachine, error)
+	// DeleteVirtualMachine removes a VM. When deleteDisks is true the disk
+	// volumes are also deleted from their storage pool; otherwise only the
+	// domain definition is removed. Requires the VM to be stopped (returns
+	// ErrInvalidVMState otherwise). Returns ErrVMNotFound for an unknown VM.
+	DeleteVirtualMachine(ctx context.Context, id string, deleteDisks bool) error
 
 	ListStoragePools(ctx context.Context) ([]types.StoragePool, error)
 	GetStoragePool(ctx context.Context, id string) (types.StoragePool, error)

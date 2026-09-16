@@ -734,6 +734,33 @@ paths:
         '404': { $ref: '#/components/responses/VMNotFound' }
         '409': { $ref: '#/components/responses/VMInvalidState' }
         '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      operationId: deleteVirtualMachine
+      tags: [Virtual Machines]
+      summary: Delete a virtual machine
+      description: |
+        Removes a virtual machine. Two levels of deletion are supported via
+        the deleteDisks query parameter:
+
+        * `deleteDisks=false` (default): undefines only the domain
+          configuration. The disk volumes remain in the storage pool and can
+          be reclaimed or reused manually.
+        * `deleteDisks=true`: undefines the domain AND deletes its disk
+          volumes from the storage pool, freeing the space.
+
+        The VM must be stopped (409 otherwise).
+      parameters:
+        - { $ref: '#/components/parameters/VMId' }
+        - name: deleteDisks
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: Also delete the VM's disk volumes from the storage pool.
+      responses:
+        '204': { description: Virtual machine deleted }
+        '404': { $ref: '#/components/responses/VMNotFound' }
+        '409': { $ref: '#/components/responses/VMInvalidState' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /vms/{id}/start:
     post:

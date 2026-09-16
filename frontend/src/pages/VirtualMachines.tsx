@@ -20,6 +20,7 @@ import {
 import { useToast } from '../components/Toast';
 
 type PowerAction = 'start' | 'shutdown' | 'reboot' | 'stop';
+type ConfirmAction = PowerAction | 'delete' | 'delete-disks';
 type StatusFilter = 'all' | 'running' | 'stopped' | 'other';
 type SortKey = 'name' | 'state' | 'vcpus' | 'memory' | 'uptime';
 
@@ -37,7 +38,7 @@ export default function VirtualMachines() {
   const [view, setView] = useState<'table' | 'grid'>('table');
   const [busy, setBusy] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [confirm, setConfirm] = useState<{ vm: VirtualMachine; action: PowerAction } | null>(null);
+  const [confirm, setConfirm] = useState<{ vm: VirtualMachine; action: ConfirmAction } | null>(null);
 
   const { data, error, loading, refresh } = usePolling(async () => {
     const [vms, host] = await Promise.all([
@@ -56,6 +57,30 @@ export default function VirtualMachines() {
       try {
         await unwrap(api.POST(`/vms/{id}/${action}`, { params: { path: { id: vm.id } } }));
         toast.push('success', `${vm.name}: ${action === 'stop' ? 'force stop' : action} requested`);
+        await refresh();
+      } catch (e) {
+        toast.push(
+          'error',
+          e instanceof ApiError ? `${vm.name}: ${e.code} — ${e.message}` : String(e),
+        );
+      } finally {
+        setBusy(null);
+        setConfirm(null);
+      }
+    },
+    [refresh, toast],
+  );
+
+  const deleteVM = useCallback(
+    async (vm: VirtualMachine, deleteDisks: boolean) => {
+      setBusy(vm.id);
+      try {
+        await unwrap(
+          api.DELETE('/vms/{id}', {
+            params: { path: { id: vm.id }, query: { deleteDisks } },
+          }),
+        );
+        toast.push('success', `${vm.name}: deleted${deleteDisks ? ' (disks removed)' : ''}`);
         await refresh();
       } catch (e) {
         toast.push(
@@ -118,8 +143,9 @@ export default function VirtualMachines() {
       { label: 'Reboot', icon: mi(RotateCcw), onSelect: () => void runAction(vm, 'reboot'), disabled: busy === vm.id || !runningState, title: 'Graceful ACPI reboot' },
       { kind: 'separator' },
       { label: 'Force Stop', icon: mi(OctagonX), danger: true, onSelect: () => setConfirm({ vm, action: 'stop' }), disabled: busy === vm.id || !runningState, title: 'Pull the power cable — data loss possible' },
-      // TODO(backend): no DELETE /vms/{id} endpoint yet.
-      { label: 'Delete', icon: mi(Trash2), danger: true, disabled: true, title: 'VM deletion is not available yet' },
+      { kind: 'separator' },
+      { label: 'Delete (keep disks)', icon: mi(Trash2), danger: true, onSelect: () => setConfirm({ vm, action: 'delete' }), disabled: busy === vm.id || !startable, title: startable ? 'Remove the VM configuration; disk volumes stay in the pool' : 'VM must be stopped to delete' },
+      { label: 'Delete + disks', icon: mi(Trash2), danger: true, onSelect: () => setConfirm({ vm, action: 'delete-disks' }), disabled: busy === vm.id || !startable, title: startable ? 'Remove the VM configuration AND delete its disk volumes (frees space)' : 'VM must be stopped to delete' },
     ];
   };
 
@@ -365,6 +391,35 @@ export default function VirtualMachines() {
         busy={busy === confirm?.vm.id}
         onCancel={() => setConfirm(null)}
         onConfirm={() => confirm && void runAction(confirm.vm, 'stop')}
+      />
+      <ConfirmDialog
+        open={confirm?.action === 'delete'}
+        title={`Delete "${confirm?.vm.name ?? ''}"?`}
+        message={
+          <>
+            The virtual machine definition will be removed. Its <strong>disk volumes remain</strong> in
+            the storage pool and can be reclaimed manually. Use “Delete + disks” to free the space.
+          </>
+        }
+        confirmLabel="Delete VM"
+        busy={busy === confirm?.vm.id}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => confirm && void deleteVM(confirm.vm, false)}
+      />
+
+      <ConfirmDialog
+        open={confirm?.action === 'delete-disks'}
+        title={`Delete "${confirm?.vm.name ?? ''}" and its disks?`}
+        message={
+          <>
+            The virtual machine <strong>and all of its disk volumes</strong> will be permanently
+            deleted. This frees the storage space and <strong>cannot be undone</strong>.
+          </>
+        }
+        confirmLabel="Delete + Disks"
+        busy={busy === confirm?.vm.id}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => confirm && void deleteVM(confirm.vm, true)}
       />
     </div>
   );

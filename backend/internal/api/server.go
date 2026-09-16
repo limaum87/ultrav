@@ -71,6 +71,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("POST /api/v1/vms", s.handleCreateVM)
 	mux.HandleFunc("GET /api/v1/vms/{id}", s.requireValidVMID(s.handleGetVM))
 	mux.HandleFunc("PATCH /api/v1/vms/{id}", s.requireValidVMID(s.handleUpdateVM))
+	mux.HandleFunc("DELETE /api/v1/vms/{id}", s.requireValidVMID(s.handleDeleteVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/start", s.requireValidVMID(s.handleStartVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/shutdown", s.requireValidVMID(s.handleShutdownVM))
 	mux.HandleFunc("POST /api/v1/vms/{id}/reboot", s.requireValidVMID(s.handleRebootVM))
@@ -228,6 +229,25 @@ func (s *Server) handleUpdateVM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, vm)
+}
+
+// handleDeleteVM removes a virtual machine. deleteDisks=true also deletes
+// the disk volumes; otherwise only the domain definition is removed.
+func (s *Server) handleDeleteVM(w http.ResponseWriter, r *http.Request) {
+	deleteDisks := false
+	switch v := r.URL.Query().Get("deleteDisks"); v {
+	case "", "false":
+	case "true":
+		deleteDisks = true
+	default:
+		s.writeError(w, r, CodeValidationError, "deleteDisks must be 'true' or 'false'")
+		return
+	}
+	if err := s.provider.DeleteVirtualMachine(r.Context(), r.PathValue("id"), deleteDisks); err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // validateUpdateVM enforces the contract constraints for PATCH /vms/{id}.

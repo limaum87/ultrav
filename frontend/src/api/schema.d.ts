@@ -484,7 +484,20 @@ export interface paths {
         get: operations["getVirtualMachine"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a virtual machine
+         * @description Removes a virtual machine. Two levels of deletion are supported via
+         *     the deleteDisks query parameter:
+         *
+         *     * `deleteDisks=false` (default): undefines only the domain
+         *       configuration. The disk volumes remain in the storage pool and can
+         *       be reclaimed or reused manually.
+         *     * `deleteDisks=true`: undefines the domain AND deletes its disk
+         *       volumes from the storage pool, freeing the space.
+         *
+         *     The VM must be stopped (409 otherwise).
+         */
+        delete: operations["deleteVirtualMachine"];
         options?: never;
         head?: never;
         /**
@@ -2374,6 +2387,33 @@ export interface operations {
                 };
             };
             404: components["responses"]["VMNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteVirtualMachine: {
+        parameters: {
+            query?: {
+                /** @description Also delete the VM's disk volumes from the storage pool. */
+                deleteDisks?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Virtual machine identifier (name). */
+                id: components["parameters"]["VMId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Virtual machine deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["VMNotFound"];
+            409: components["responses"]["VMInvalidState"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -647,6 +647,12 @@ type UploadIsoMultipartBody struct {
 	File openapi_types.File `json:"file"`
 }
 
+// DeleteVirtualMachineParams defines parameters for DeleteVirtualMachine.
+type DeleteVirtualMachineParams struct {
+	// DeleteDisks Also delete the VM's disk volumes from the storage pool.
+	DeleteDisks *bool `form:"deleteDisks,omitempty" json:"deleteDisks,omitempty"`
+}
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 

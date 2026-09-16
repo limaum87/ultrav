@@ -356,6 +356,24 @@ func (p *Provider) ForceStopVirtualMachine(_ context.Context, id string) (types.
 	return p.toModel(vm), nil
 }
 
+// DeleteVirtualMachine removes a simulated VM. With deleteDisks the disk
+// definition is dropped along with the VM (there is no real volume to unlink;
+// host storage accounting updates automatically via storageUsedLocked).
+func (p *Provider) DeleteVirtualMachine(_ context.Context, id string, _ bool) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	vm, err := p.getLocked(id)
+	if err != nil {
+		return err
+	}
+	if vm.state != types.VMStateStopped {
+		return fmt.Errorf("%w: cannot delete a virtual machine that is not stopped", hypervisor.ErrInvalidVMState)
+	}
+	delete(p.vms, id)
+	return nil
+}
+
 // UpdateVirtualMachine changes VM settings: vcpus, memoryBytes and isoId.
 // vCPU/memory require the VM to be stopped; the ISO can be swapped anytime
 // (the mock simply records it — there is no real CD-ROM to attach).

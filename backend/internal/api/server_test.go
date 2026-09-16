@@ -125,6 +125,54 @@ func TestVMOperationsThroughHTTP(t *testing.T) {
 	}
 }
 
+func TestDeleteVM(t *testing.T) {
+	s := testServer(t)
+
+	// cannot delete a running VM -> 409
+	res, _ := del(t, s, "/api/v1/vms/erp01")
+	if res.StatusCode != 409 {
+		t.Fatalf("expected 409 deleting running VM, got %d", res.StatusCode)
+	}
+
+	// invalid deleteDisks value -> 400
+	res, _ = del(t, s, "/api/v1/vms/monitoring01?deleteDisks=yes")
+	if res.StatusCode != 400 {
+		t.Fatalf("expected 400 for bad deleteDisks, got %d", res.StatusCode)
+	}
+
+	// delete config only
+	res, _ = del(t, s, "/api/v1/vms/monitoring01")
+	if res.StatusCode != 204 {
+		t.Fatalf("expected 204, got %d", res.StatusCode)
+	}
+	if res, _ := get(t, s, "/api/v1/vms/monitoring01"); res.StatusCode != 404 {
+		t.Fatalf("expected 404 after delete, got %d", res.StatusCode)
+	}
+
+	// deleting again -> 404
+	res, _ = del(t, s, "/api/v1/vms/monitoring01")
+	if res.StatusCode != 404 {
+		t.Fatalf("expected 404, got %d", res.StatusCode)
+	}
+
+	// delete with disks (web01 starts running; force stop first)
+	post(t, s, "/api/v1/vms/web01/stop")
+	if res, _ = del(t, s, "/api/v1/vms/web01?deleteDisks=true"); res.StatusCode != 204 {
+		t.Fatalf("expected 204, got %d", res.StatusCode)
+	}
+}
+
+func del(t *testing.T, s *Server, path string) (*http.Response, map[string]any) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodDelete, path, nil)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	res := rec.Result()
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	return res, body
+}
+
 func postJSON(t *testing.T, s *Server, path string, payload string) (*http.Response, map[string]any) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(payload))
