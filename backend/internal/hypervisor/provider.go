@@ -87,6 +87,9 @@ var (
 	ErrPoolAlreadyExists = errors.New("a storage pool with this name already exists")
 	// ErrPoolNotFound is returned when the requested storage pool does not exist.
 	ErrPoolNotFound = errors.New("storage pool was not found")
+	// ErrPoolInsufficientSpace is returned when creating a VM whose disk does
+	// not fit in the storage pool's available space.
+	ErrPoolInsufficientSpace = errors.New("insufficient space in storage pool")
 	// ErrNetworkNotFound is returned when the requested network does not exist.
 	ErrNetworkNotFound = errors.New("network was not found")
 	// ErrNetworkAlreadyExists is returned when creating a network whose name

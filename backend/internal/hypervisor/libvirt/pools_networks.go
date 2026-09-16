@@ -141,6 +141,13 @@ func poolToModel(pool *libvirt.StoragePool) (types.StoragePool, error) {
 	if err != nil {
 		return types.StoragePool{}, err
 	}
+	// libvirt caches capacity/allocation/available until an explicit refresh;
+	// without this, space freed outside libvirt (deleted volumes, files removed
+	// by UltraV) is only reflected after a manual pool-refresh. Best-effort:
+	// a failed refresh just reports stale numbers.
+	if active, err := pool.IsActive(); err == nil && active {
+		_ = pool.Refresh(0)
+	}
 	info, err := pool.GetInfo()
 	if err != nil {
 		return types.StoragePool{}, err

@@ -126,6 +126,7 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		osType = *req.OsType
 	}
 	var warnings []string
+	var poolSpaceErr error
 
 	err := p.withConn(func(c *libvirt.Connect) error {
 		// Refuse to redefine an existing domain.
@@ -138,8 +139,17 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		if err != nil {
 			return hypervisor.ErrPoolNotFound
 		}
-		if active, err := pool.IsActive(); err == nil && !active {
-			pool.Refresh(0)
+		if active, err := pool.IsActive(); err == nil {
+			// Recompute capacity/allocation so the free-space check below never
+			// sees stale numbers (libvirt caches them until an explicit refresh).
+			_ = pool.Refresh(0)
+			if active && req.Disk.SizeBytes > 0 {
+				if info, err := pool.GetInfo(); err == nil && req.Disk.SizeBytes > int64(info.Available) {
+					poolSpaceErr = fmt.Errorf("%w: disk size (%d bytes) exceeds the free space in pool %q (%d bytes available)",
+						hypervisor.ErrPoolInsufficientSpace, req.Disk.SizeBytes, req.Disk.PoolId, info.Available)
+					return poolSpaceErr
+				}
+			}
 		}
 
 		volXML := fmt.Sprintf(`<volume type='file'>

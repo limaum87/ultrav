@@ -86,6 +86,8 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeVMNotFound, "Virtual machine was not found")
 	case errors.Is(err, hypervisor.ErrPoolNotFound):
 		s.writeError(w, r, CodePoolNotFound, "Storage pool was not found")
+	case errors.Is(err, hypervisor.ErrPoolInsufficientSpace):
+		s.writeError(w, r, CodeValidationError, err.Error())
 	case errors.Is(err, hypervisor.ErrPoolAlreadyExists):
 		s.writeError(w, r, CodePoolAlreadyExists, "A storage pool with this name already exists")
 	case errors.Is(err, hypervisor.ErrNetworkNotFound):
