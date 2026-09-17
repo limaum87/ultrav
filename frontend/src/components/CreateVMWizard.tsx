@@ -17,6 +17,8 @@ type Form = {
   networkId: string;
   isoId: string | null;
   osType: 'linux' | 'windows' | 'other';
+  /** '' = follow the osType profile (virtio, or e1000e for other). */
+  nicModel: '' | 'virtio' | 'e1000e' | 'rtl8139';
   virtioDriversIsoId: string | null;
   start: boolean;
 };
@@ -48,6 +50,7 @@ export function CreateVMWizard({
     networkId: 'default',
     isoId: null,
     osType: 'linux',
+    nicModel: '',
     virtioDriversIsoId: null,
     start: false,
   });
@@ -55,6 +58,10 @@ export function CreateVMWizard({
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  // What the backend picks when nicModel is left empty (osType profile).
+  const autoNic = form.osType === 'other' ? 'e1000e' : 'virtio';
+  const effectiveNic = form.nicModel || autoNic;
 
   // Load pools + networks when the wizard opens; default selections.
   useEffect(() => {
@@ -116,6 +123,7 @@ export function CreateVMWizard({
             networkId: form.networkId,
             isoId: form.isoId,
             osType: form.osType,
+            ...(form.nicModel ? { nicModel: form.nicModel } : {}),
             ...(form.osType === 'windows' ? { virtioDriversIsoId: form.virtioDriversIsoId } : {}),
             start: form.start,
           },
@@ -289,9 +297,30 @@ export function CreateVMWizard({
                   {networks.length === 0 && <option value="">No networks available</option>}
                 </select>
               </label>
+              <label className="field">
+                <span>Adapter model</span>
+                <select
+                  value={form.nicModel}
+                  onChange={(e) => set('nicModel', e.target.value as Form['nicModel'])}
+                  disabled={submitting}
+                >
+                  <option value="">Automatic — {autoNic} (from the {form.osType} profile)</option>
+                  <option value="virtio">virtio — fastest, needs a driver in the guest</option>
+                  <option value="e1000e">e1000e — emulated Intel, works out of the box</option>
+                  <option value="rtl8139">rtl8139 — emulated Realtek, for very old guests</option>
+                </select>
+              </label>
               <p className="wiz-hint">
-                The VM gets one virtio NIC on the selected network.
+                The VM gets one {effectiveNic} NIC on the selected network.
               </p>
+              {form.osType === 'windows' && effectiveNic === 'virtio' && (
+                <p className="alert warn">
+                  Windows has no in-box virtio driver: this VM boots without network until you
+                  install NetKVM from the VirtIO drivers ISO (Device Manager shows the adapter
+                  with error 43 or as an unknown Ethernet controller). Choose <strong>e1000e</strong>{' '}
+                  if it needs network on first boot.
+                </p>
+              )}
             </div>
           )}
 
@@ -361,7 +390,7 @@ export function CreateVMWizard({
               <div className="kv"><span className="kv-key">vCPUs</span><span className="kv-val">{form.vcpus}</span></div>
               <div className="kv"><span className="kv-key">Memory</span><span className="kv-val">{form.memoryGiB} GiB</span></div>
               <div className="kv"><span className="kv-key">Disk</span><span className="kv-val">{form.diskGiB} GiB {form.format} · pool “{form.poolId}”</span></div>
-              <div className="kv"><span className="kv-key">Network</span><span className="kv-val">{form.networkId} (virtio)</span></div>
+              <div className="kv"><span className="kv-key">Network</span><span className="kv-val">{form.networkId} ({effectiveNic})</span></div>
               <div className="kv"><span className="kv-key">Install media</span><span className="kv-val">{form.isoId ?? 'none'}</span></div>
               <label className="field field-check" style={{ marginTop: 12 }}>
                 <input

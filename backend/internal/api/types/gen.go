@@ -95,6 +95,13 @@ const (
 	Scsi PerformanceProfileDiskBus = "scsi"
 )
 
+// Defines values for PerformanceProfileNicModel.
+const (
+	PerformanceProfileNicModelE1000e  PerformanceProfileNicModel = "e1000e"
+	PerformanceProfileNicModelRtl8139 PerformanceProfileNicModel = "rtl8139"
+	PerformanceProfileNicModelVirtio  PerformanceProfileNicModel = "virtio"
+)
+
 // Defines values for ReadinessHypervisor.
 const (
 	ReadinessHypervisorReady       ReadinessHypervisor = "ready"
@@ -152,6 +159,13 @@ const (
 	VirtualMachineOsTypeLinux   VirtualMachineOsType = "linux"
 	VirtualMachineOsTypeOther   VirtualMachineOsType = "other"
 	VirtualMachineOsTypeWindows VirtualMachineOsType = "windows"
+)
+
+// Defines values for VirtualMachineCreateNicModel.
+const (
+	VirtualMachineCreateNicModelE1000e  VirtualMachineCreateNicModel = "e1000e"
+	VirtualMachineCreateNicModelRtl8139 VirtualMachineCreateNicModel = "rtl8139"
+	VirtualMachineCreateNicModelVirtio  VirtualMachineCreateNicModel = "virtio"
 )
 
 // Defines values for VirtualMachineCreateOsType.
@@ -410,6 +424,9 @@ type PerformanceProfile struct {
 
 	// IoThreads Number of iothreads dedicated to the SCSI controller (0/absent when not applied, e.g. the `other` profile).
 	IoThreads *int `json:"ioThreads"`
+
+	// NicModel Network adapter model applied (null for VMs created before this was recorded).
+	NicModel *PerformanceProfileNicModel `json:"nicModel"`
 }
 
 // PerformanceProfileCache Disk cache mode applied.
@@ -420,6 +437,9 @@ type PerformanceProfileCpuMode string
 
 // PerformanceProfileDiskBus Disk bus applied (virtio-scsi for linux/windows profiles, SATA for other).
 type PerformanceProfileDiskBus string
+
+// PerformanceProfileNicModel Network adapter model applied (null for VMs created before this was recorded).
+type PerformanceProfileNicModel string
 
 // Readiness defines model for Readiness.
 type Readiness struct {
@@ -559,6 +579,17 @@ type VirtualMachineCreate struct {
 	Name        string  `json:"name"`
 	NetworkId   *string `json:"networkId,omitempty"`
 
+	// NicModel Network adapter model. Omitted, it follows the `osType` profile:
+	// `virtio` for linux/windows, `e1000e` for other.
+	//
+	// `virtio` is the fastest but needs a driver in the guest. Linux has
+	// it in-tree; **Windows does not** — the NIC stays unusable (device
+	// error 43 or an unknown Ethernet controller) until NetKVM is
+	// installed from the VirtIO drivers ISO. Pick `e1000e` for a Windows
+	// guest that must have network on first boot, or `rtl8139` for very
+	// old guests without an e1000e driver.
+	NicModel *VirtualMachineCreateNicModel `json:"nicModel"`
+
 	// OsType Guest operating system family, selects the performance profile
 	// applied to the domain XML (see endpoint description).
 	OsType *VirtualMachineCreateOsType `json:"osType,omitempty"`
@@ -574,6 +605,17 @@ type VirtualMachineCreate struct {
 	// virtio-scsi disk unless drivers are loaded from another source.
 	VirtioDriversIsoId *string `json:"virtioDriversIsoId"`
 }
+
+// VirtualMachineCreateNicModel Network adapter model. Omitted, it follows the `osType` profile:
+// `virtio` for linux/windows, `e1000e` for other.
+//
+// `virtio` is the fastest but needs a driver in the guest. Linux has
+// it in-tree; **Windows does not** — the NIC stays unusable (device
+// error 43 or an unknown Ethernet controller) until NetKVM is
+// installed from the VirtIO drivers ISO. Pick `e1000e` for a Windows
+// guest that must have network on first boot, or `rtl8139` for very
+// old guests without an e1000e driver.
+type VirtualMachineCreateNicModel string
 
 // VirtualMachineCreateOsType Guest operating system family, selects the performance profile
 // applied to the domain XML (see endpoint description).

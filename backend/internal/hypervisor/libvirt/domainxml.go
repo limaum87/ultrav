@@ -56,6 +56,10 @@ type domainSpec struct {
 	// VirtioISOPath is the VirtIO drivers ISO attached as second SATA CD-ROM
 	// (windows installs only); empty means not attached.
 	VirtioISOPath string
+
+	// NICModel overrides the profile's network adapter model. Empty means
+	// "use the profile default" (virtio, or e1000e for the other profile).
+	NICModel types.VirtualMachineCreateNicModel
 }
 
 // hostFeatures carries the host facts the profiles depend on. A zero value
@@ -321,13 +325,14 @@ type domainXMLModel struct {
 // appliedProfile records what buildDomainXML decided, so the Provider can
 // report performanceProfile back to the API and log skipped enlightenments.
 type appliedProfile struct {
-	CpuMode              string
-	DiskBus              string
-	Cache                string
-	IOThreads            int
-	HypervEnlightenments []string
+	CpuMode               string
+	DiskBus               string
+	Cache                 string
+	NICModel              string
+	IOThreads             int
+	HypervEnlightenments  []string
 	SkippedEnlightenments []string
-	OSType               types.VirtualMachineCreateOsType
+	OSType                types.VirtualMachineCreateOsType
 }
 
 func (a appliedProfile) toAPI() *types.PerformanceProfile {
@@ -358,10 +363,16 @@ func (a appliedProfile) toAPI() *types.PerformanceProfile {
 	}
 	osType := types.VirtualMachineOsType(a.OSType)
 	_ = osType
+	var nic *types.PerformanceProfileNicModel
+	if a.NICModel != "" {
+		n := types.PerformanceProfileNicModel(a.NICModel)
+		nic = &n
+	}
 	return &types.PerformanceProfile{
 		CpuMode:              &cpuMode,
 		DiskBus:              &diskBus,
 		Cache:                cache,
+		NicModel:             nic,
 		IoThreads:            &io,
 		HypervEnlightenments: &enlight,
 	}
@@ -415,10 +426,11 @@ func buildDomainXML(spec domainSpec, caps hostFeatures) (string, *appliedProfile
 
 	queue := queueCount(spec.Vcpus)
 	profile := appliedProfile{
-		OSType:   osType,
-		CpuMode:  "host-passthrough",
-		DiskBus:  "scsi",
-		Cache:    "none",
+		OSType:    osType,
+		CpuMode:   "host-passthrough",
+		DiskBus:   "scsi",
+		Cache:     "none",
+		NICModel:  "virtio",
 		IOThreads: 1,
 	}
 
@@ -478,6 +490,7 @@ func buildDomainXML(spec domainSpec, caps hostFeatures) (string, *appliedProfile
 		profile.CpuMode = "host-model"
 		profile.DiskBus = "sata"
 		profile.Cache = ""
+		profile.NICModel = "e1000e"
 		profile.IOThreads = 0
 		d.CPU = &domainCPU{Mode: "host-model"}
 		d.IOThreads = nil
@@ -487,6 +500,19 @@ func buildDomainXML(spec domainSpec, caps hostFeatures) (string, *appliedProfile
 		// the defaults set above are the linux profile
 	default:
 		return "", nil, fmt.Errorf("unknown osType %q", osType)
+	}
+
+	// An explicit nicModel overrides the profile: a Windows guest that must
+	// have network before NetKVM is installed needs an emulated adapter.
+	if spec.NICModel != "" {
+		switch spec.NICModel {
+		case types.VirtualMachineCreateNicModelVirtio,
+			types.VirtualMachineCreateNicModelE1000e,
+			types.VirtualMachineCreateNicModelRtl8139:
+			profile.NICModel = string(spec.NICModel)
+		default:
+			return "", nil, fmt.Errorf("unknown nicModel %q", spec.NICModel)
+		}
 	}
 
 	// Disks. Device names must be unique across buses (they all surface as
@@ -543,11 +569,10 @@ func buildDomainXML(spec domainSpec, caps hostFeatures) (string, *appliedProfile
 	nic := interfaceXML{
 		Type:   "network",
 		Source: interfaceSource{Network: spec.NetworkId},
-		Model:  interfaceModel{Type: "virtio"},
+		Model:  interfaceModel{Type: profile.NICModel},
 	}
-	if osType == types.VirtualMachineCreateOsTypeOther {
-		nic.Model.Type = "e1000e"
-	} else {
+	// vhost multi-queue is a virtio-net feature; emulated models reject it.
+	if profile.NICModel == "virtio" {
 		nic.Driver = &interfaceDriver{Name: "vhost", Queues: queue}
 	}
 	d.Devices.Interface = nic
@@ -602,6 +627,11 @@ func detectProfileFromDomainXML(xmlStr string) (osType *types.VirtualMachineOsTy
 					Bus string `xml:"bus,attr"`
 				} `xml:"target"`
 			} `xml:"disk"`
+			Interface struct {
+				Model struct {
+					Type string `xml:"type,attr"`
+				} `xml:"model"`
+			} `xml:"interface"`
 		} `xml:"devices"`
 	}
 	if err := xml.Unmarshal([]byte(xmlStr), &dx); err != nil {
@@ -633,10 +663,17 @@ func detectProfileFromDomainXML(xmlStr string) (osType *types.VirtualMachineOsTy
 	if dx.IOThreads != nil {
 		ioThreads = *dx.IOThreads
 	}
+	var nic *types.PerformanceProfileNicModel
+	switch dx.Devices.Interface.Model.Type {
+	case "virtio", "e1000e", "rtl8139":
+		n := types.PerformanceProfileNicModel(dx.Devices.Interface.Model.Type)
+		nic = &n
+	}
 	return &os, &types.PerformanceProfile{
 		CpuMode:   &cpuMode,
 		DiskBus:   &diskBus,
 		Cache:     cache,
+		NicModel:  nic,
 		IoThreads: &ioThreads,
 	}
 }

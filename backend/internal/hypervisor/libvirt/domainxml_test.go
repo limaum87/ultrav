@@ -436,6 +436,61 @@ func TestBuildDomainXML_OtherProfile(t *testing.T) {
 	}
 }
 
+// The whole point of the override: a Windows guest that must have network
+// before anyone can install NetKVM.
+func TestBuildDomainXML_NICModelOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		osType     types.VirtualMachineCreateOsType
+		override   types.VirtualMachineCreateNicModel
+		wantModel  string
+		wantDriver bool // vhost multi-queue, virtio-only
+	}{
+		{name: "linux default stays virtio", osType: types.VirtualMachineCreateOsTypeLinux, wantModel: "virtio", wantDriver: true},
+		{name: "windows default stays virtio", osType: types.VirtualMachineCreateOsTypeWindows, wantModel: "virtio", wantDriver: true},
+		{name: "other default stays e1000e", osType: types.VirtualMachineCreateOsTypeOther, wantModel: "e1000e"},
+		{
+			name: "windows overridden to e1000e", osType: types.VirtualMachineCreateOsTypeWindows,
+			override: types.VirtualMachineCreateNicModelE1000e, wantModel: "e1000e",
+		},
+		{
+			name: "linux overridden to rtl8139", osType: types.VirtualMachineCreateOsTypeLinux,
+			override: types.VirtualMachineCreateNicModelRtl8139, wantModel: "rtl8139",
+		},
+		{
+			name: "other overridden back to virtio", osType: types.VirtualMachineCreateOsTypeOther,
+			override: types.VirtualMachineCreateNicModelVirtio, wantModel: "virtio", wantDriver: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := baseSpec(tt.osType)
+			spec.NICModel = tt.override
+			d, profile := build(t, spec, modernCaps())
+
+			if got := d.Devices.Interface.Model.Type; got != tt.wantModel {
+				t.Errorf("NIC model = %s, want %s", got, tt.wantModel)
+			}
+			if profile.NICModel != tt.wantModel {
+				t.Errorf("appliedProfile.NICModel = %s, want %s", profile.NICModel, tt.wantModel)
+			}
+			// vhost queues are a virtio-net feature; qemu rejects them on an
+			// emulated model, so the override must drop the driver element.
+			if got := d.Devices.Interface.Driver != nil; got != tt.wantDriver {
+				t.Errorf("NIC driver present = %v, want %v", got, tt.wantDriver)
+			}
+		})
+	}
+}
+
+func TestBuildDomainXML_NICModelRejectsUnknown(t *testing.T) {
+	spec := baseSpec(types.VirtualMachineCreateOsTypeLinux)
+	spec.NICModel = types.VirtualMachineCreateNicModel("ne2k_pci")
+	if _, _, err := buildDomainXML(spec, modernCaps()); err == nil {
+		t.Fatal("expected an error for an unknown nicModel")
+	}
+}
+
 func TestBuildDomainXML_QueueCap(t *testing.T) {
 	spec := baseSpec(types.VirtualMachineCreateOsTypeLinux)
 	spec.Vcpus = 64

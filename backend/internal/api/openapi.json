@@ -1163,7 +1163,7 @@
           "Virtual Machines"
         ],
         "summary": "Create a virtual machine",
-        "description": "Defines a new virtual machine: allocates a disk volume in the chosen\nstorage pool and defines the domain (left stopped unless `start` is\ntrue). The VM is not booted from an OS image \u2014 attach installation\nmedia with virt-install/virt-manager afterwards if needed.\n\nThe `osType` selects a performance profile applied to the generated\ndomain XML:\n\n- **linux** (default): virtio-scsi disk on an iothread-ed controller\n  (`cache='none'`, `io='native'`, `discard='unmap'`), virtio NIC with\n  vhost multi-queue, `cpu mode='host-passthrough'` (note: limits live\n  migration between hosts with different CPUs \u2014 relevant for the\n  future multi-host phase), guest agent channel, memballoon disabled,\n  catchup timers and a virtio RNG.\n- **windows**: everything from the linux profile plus Hyper-V\n  enlightenments (relaxed, vapic, spinlocks, vpindex, synic, stimer,\n  runtime, frequencies, reset, tlbflush, ipi \u2014 only the ones supported\n  by the host's QEMU/libvirt are included), `clock offset='localtime'`\n  with hypervclock timer. If `virtioDriversIsoId` is set, the VirtIO\n  drivers ISO is attached as a second SATA CD-ROM so the Windows\n  installer can load `vioscsi`/`NetKVM`. Without it, creation still\n  succeeds but `warnings[]` in the response explains the installer\n  will not see the virtio-scsi disk.\n- **other**: maximum compatibility \u2014 SATA disk, e1000e NIC,\n  `cpu mode='host-model'`, no enlightenments. Use for exotic guests or\n  a first boot of a converted VHDX without virtio drivers.\n\nThe applied profile is reported back in the returned VM's\n`performanceProfile`.\n",
+        "description": "Defines a new virtual machine: allocates a disk volume in the chosen\nstorage pool and defines the domain (left stopped unless `start` is\ntrue). The VM is not booted from an OS image \u2014 attach installation\nmedia with virt-install/virt-manager afterwards if needed.\n\nThe `osType` selects a performance profile applied to the generated\ndomain XML:\n\n- **linux** (default): virtio-scsi disk on an iothread-ed controller\n  (`cache='none'`, `io='native'`, `discard='unmap'`), virtio NIC with\n  vhost multi-queue, `cpu mode='host-passthrough'` (note: limits live\n  migration between hosts with different CPUs \u2014 relevant for the\n  future multi-host phase), guest agent channel, memballoon disabled,\n  catchup timers and a virtio RNG.\n- **windows**: everything from the linux profile plus Hyper-V\n  enlightenments (relaxed, vapic, spinlocks, vpindex, synic, stimer,\n  runtime, frequencies, reset, tlbflush, ipi \u2014 only the ones supported\n  by the host's QEMU/libvirt are included), `clock offset='localtime'`\n  with hypervclock timer. If `virtioDriversIsoId` is set, the VirtIO\n  drivers ISO is attached as a second SATA CD-ROM so the Windows\n  installer can load `vioscsi`/`NetKVM`. Without it, creation still\n  succeeds but `warnings[]` in the response explains the installer\n  will not see the virtio-scsi disk.\n- **other**: maximum compatibility \u2014 SATA disk, e1000e NIC,\n  `cpu mode='host-model'`, no enlightenments. Use for exotic guests or\n  a first boot of a converted VHDX without virtio drivers.\n\nThe NIC model follows the profile (`virtio`, or `e1000e` for `other`)\nunless `nicModel` overrides it. A Windows guest on a `virtio` NIC has\nno network until NetKVM is installed from the VirtIO drivers ISO; the\nresponse says so in `warnings[]`.\n\nThe applied profile is reported back in the returned VM's\n`performanceProfile`.\n",
         "requestBody": {
           "required": true,
           "content": {
@@ -2486,6 +2486,17 @@
             "description": "Optional VirtIO drivers ISO from the library (e.g.\n`virtio-win-0.1.266.iso`), attached as a second SATA CD-ROM for\nWindows installations. Only meaningful when `osType` is `windows`;\nignored otherwise. Without it the Windows installer cannot see the\nvirtio-scsi disk unless drivers are loaded from another source.\n",
             "example": "virtio-win-0.1.266.iso"
           },
+          "nicModel": {
+            "type": "string",
+            "enum": [
+              "virtio",
+              "e1000e",
+              "rtl8139"
+            ],
+            "nullable": true,
+            "description": "Network adapter model. Omitted, it follows the `osType` profile:\n`virtio` for linux/windows, `e1000e` for other.\n\n`virtio` is the fastest but needs a driver in the guest. Linux has\nit in-tree; **Windows does not** \u2014 the NIC stays unusable (device\nerror 43 or an unknown Ethernet controller) until NetKVM is\ninstalled from the VirtIO drivers ISO. Pick `e1000e` for a Windows\nguest that must have network on first boot, or `rtl8139` for very\nold guests without an e1000e driver.\n",
+            "example": "e1000e"
+          },
           "start": {
             "type": "boolean",
             "description": "Power on immediately after creation.",
@@ -2858,6 +2869,17 @@
             "nullable": true,
             "description": "Number of iothreads dedicated to the SCSI controller (0/absent when not applied, e.g. the `other` profile).",
             "example": 1
+          },
+          "nicModel": {
+            "type": "string",
+            "enum": [
+              "virtio",
+              "e1000e",
+              "rtl8139"
+            ],
+            "nullable": true,
+            "description": "Network adapter model applied (null for VMs created before this was recorded).",
+            "example": "virtio"
           },
           "hypervEnlightenments": {
             "type": "array",

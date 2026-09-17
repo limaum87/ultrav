@@ -246,10 +246,22 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 			ISOPath:       isoPath,
 			VirtioISOPath: virtioISOPath,
 		}
+		if req.NicModel != nil {
+			spec.NICModel = *req.NicModel
+		}
 		domXML, profile, err := buildDomainXML(spec, caps)
 		if err != nil {
 			_ = vol.Delete(0)
 			return fmt.Errorf("build domain XML: %w", err)
+		}
+		// virtio-net is the fast path but Windows has no in-box driver for it,
+		// so a Windows guest boots with a dead adapter until NetKVM is loaded.
+		if osType == types.VirtualMachineCreateOsTypeWindows && profile.NICModel == "virtio" {
+			warnings = append(warnings,
+				"Windows on a virtio network adapter has no network until the NetKVM driver is "+
+					"installed from the VirtIO drivers ISO (Device Manager shows the adapter with "+
+					"error 43 or as an unknown Ethernet controller). Create with nicModel e1000e "+
+					"if the guest needs network on first boot.")
 		}
 		if len(profile.SkippedEnlightenments) > 0 {
 			slog.Info("createVirtualMachine: hyper-v enlightenments skipped (unsupported by host)",

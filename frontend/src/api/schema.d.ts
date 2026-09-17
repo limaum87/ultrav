@@ -463,6 +463,11 @@ export interface paths {
          *       `cpu mode='host-model'`, no enlightenments. Use for exotic guests or
          *       a first boot of a converted VHDX without virtio drivers.
          *
+         *     The NIC model follows the profile (`virtio`, or `e1000e` for `other`)
+         *     unless `nicModel` overrides it. A Windows guest on a `virtio` NIC has
+         *     no network until NetKVM is installed from the VirtIO drivers ISO; the
+         *     response says so in `warnings[]`.
+         *
          *     The applied profile is reported back in the returned VM's
          *     `performanceProfile`.
          */
@@ -1005,6 +1010,20 @@ export interface components {
              */
             virtioDriversIsoId?: string | null;
             /**
+             * @description Network adapter model. Omitted, it follows the `osType` profile:
+             *     `virtio` for linux/windows, `e1000e` for other.
+             *
+             *     `virtio` is the fastest but needs a driver in the guest. Linux has
+             *     it in-tree; **Windows does not** — the NIC stays unusable (device
+             *     error 43 or an unknown Ethernet controller) until NetKVM is
+             *     installed from the VirtIO drivers ISO. Pick `e1000e` for a Windows
+             *     guest that must have network on first boot, or `rtl8139` for very
+             *     old guests without an e1000e driver.
+             * @example e1000e
+             * @enum {string|null}
+             */
+            nicModel?: "virtio" | "e1000e" | "rtl8139" | null;
+            /**
              * @description Power on immediately after creation.
              * @example false
              */
@@ -1219,6 +1238,12 @@ export interface components {
              * @example 1
              */
             ioThreads?: number | null;
+            /**
+             * @description Network adapter model applied (null for VMs created before this was recorded).
+             * @example virtio
+             * @enum {string|null}
+             */
+            nicModel?: "virtio" | "e1000e" | "rtl8139" | null;
             /**
              * @description Hyper-V enlightenments actually present in the domain XML (only
              *     for `windows`; only the ones supported by the host's
