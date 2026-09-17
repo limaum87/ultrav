@@ -6,6 +6,7 @@ package hypervisor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
@@ -100,7 +101,35 @@ var (
 	// ErrInvalidNetworkState is returned when a network operation is not valid
 	// for the current network state (e.g. starting an active network).
 	ErrInvalidNetworkState = errors.New("operation is not valid for the current network state")
+	// ErrStorageUnavailable is returned when the hypervisor itself cannot open
+	// a file a domain references (install ISO, disk volume). Match it with
+	// errors.Is; the concrete *StorageUnavailableError carries the path.
+	ErrStorageUnavailable = errors.New("the hypervisor cannot access a file this virtual machine references")
 )
+
+// StorageUnavailableError is the concrete form of ErrStorageUnavailable. It
+// exists because the path is the whole diagnostic: the file is reachable from
+// the backend (validation passed) but not from the hypervisor, which is what
+// actually opens it. The usual cause is a containerized backend whose storage
+// directory is not mounted at an identical path on the host.
+type StorageUnavailableError struct {
+	// Path is the file as written in the domain XML.
+	Path string
+	// Hint explains why the hypervisor cannot see it, when that can be
+	// determined. May be empty.
+	Hint string
+}
+
+func (e *StorageUnavailableError) Error() string {
+	msg := fmt.Sprintf("the hypervisor cannot access %q", e.Path)
+	if e.Hint != "" {
+		msg += " — " + e.Hint
+	}
+	return msg
+}
+
+// Is makes errors.Is(err, ErrStorageUnavailable) match any instance.
+func (e *StorageUnavailableError) Is(target error) bool { return target == ErrStorageUnavailable }
 
 type errVMNotFound struct{}
 

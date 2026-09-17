@@ -165,7 +165,7 @@ func setCDROM(dom *libvirt.Domain, isoPath string) error {
 
 	xml := cdromXML(cdromTarget, isoPath)
 	if err := dom.AttachDeviceFlags(xml, libvirt.DomainDeviceModifyFlags(libvirt.DOMAIN_AFFECT_CONFIG)); err != nil {
-		return fmt.Errorf("attach cdrom: %w", err)
+		return fmt.Errorf("attach cdrom: %w", asStorageUnavailable(err))
 	}
 	return nil
 }

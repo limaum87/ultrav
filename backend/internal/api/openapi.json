@@ -1351,7 +1351,7 @@
           "Virtual Machines"
         ],
         "summary": "Start a virtual machine",
-        "description": "Powers on a stopped virtual machine. Returns 409 if already running.",
+        "description": "Powers on a stopped virtual machine. Returns 409 if already running.\n\nAlso 409, with code `STORAGE_UNAVAILABLE`, when the hypervisor cannot\nopen a file the domain references (installation ISO, disk volume). The\nmessage names the path. This is a host configuration problem, not a\ntransient fault: it usually means the backend runs in a container and\nthe directory is not mounted at an identical path on the host, so the\nfile is reachable from the API but not from qemu.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/VMId"

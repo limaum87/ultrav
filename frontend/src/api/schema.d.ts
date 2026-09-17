@@ -519,6 +519,13 @@ export interface paths {
         /**
          * Start a virtual machine
          * @description Powers on a stopped virtual machine. Returns 409 if already running.
+         *
+         *     Also 409, with code `STORAGE_UNAVAILABLE`, when the hypervisor cannot
+         *     open a file the domain references (installation ISO, disk volume). The
+         *     message names the path. This is a host configuration problem, not a
+         *     transient fault: it usually means the backend runs in a container and
+         *     the directory is not mounted at an identical path on the host, so the
+         *     file is reachable from the API but not from qemu.
          */
         post: operations["startVirtualMachine"];
         delete?: never;

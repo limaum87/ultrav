@@ -32,6 +32,7 @@ const (
 	CodeLastAdmin            = "LAST_ADMIN"
 	CodeInternalError        = "INTERNAL_ERROR"
 	CodeConsoleUnavailable   = "CONSOLE_UNAVAILABLE"
+	CodeStorageUnavailable   = "STORAGE_UNAVAILABLE"
 )
 
 // errorStatus maps error codes to HTTP status codes.
@@ -57,6 +58,7 @@ var errorStatus = map[string]int{
 	CodeLastAdmin:            http.StatusConflict,
 	CodeInternalError:        http.StatusInternalServerError,
 	CodeConsoleUnavailable:   http.StatusConflict,
+	CodeStorageUnavailable:   http.StatusConflict,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,
@@ -102,6 +104,15 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		s.writeError(w, r, CodeVMAlreadyExists, "A virtual machine with this name already exists")
 	case errors.Is(err, hypervisor.ErrIsoNotFound):
 		s.writeError(w, r, CodeIsoNotFound, "ISO image was not found")
+	case errors.Is(err, hypervisor.ErrStorageUnavailable):
+		// Configuration problem, not a transient fault: the message names the
+		// unreachable path so the operator can fix the mount.
+		var se *hypervisor.StorageUnavailableError
+		if errors.As(err, &se) {
+			s.writeError(w, r, CodeStorageUnavailable, se.Error())
+		} else {
+			s.writeError(w, r, CodeStorageUnavailable, err.Error())
+		}
 	case errors.Is(err, hypervisor.ErrConsoleUnavailable):
 		s.writeError(w, r, CodeConsoleUnavailable, "This virtual machine has no graphical console configured (add a VNC <graphics> device to its domain XML)")
 	default:

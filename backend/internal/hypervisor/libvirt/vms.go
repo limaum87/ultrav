@@ -202,6 +202,17 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 			}
 			virtioISOPath = path
 		}
+		// os.Stat above only proves the files exist in *this* mount namespace.
+		// qemu opens them on the host, so flag a namespace mismatch before the
+		// VM is created rather than letting it surface as a failed start.
+		for _, mediaPath := range []string{isoPath, virtioISOPath} {
+			if w := isoVisibilityWarning(mediaPath); w != "" {
+				slog.Warn("createVirtualMachine: ISO may be unreachable by the hypervisor",
+					"vm", req.Name, "iso", mediaPath)
+				warnings = append(warnings, w)
+			}
+		}
+
 		if osType == types.VirtualMachineCreateOsTypeWindows && virtioISOPath == "" {
 			warnings = append(warnings,
 				"Windows without a VirtIO drivers ISO: the installer will not see the "+
@@ -256,7 +267,7 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		defer dom.Free()
 		if req.Start != nil && *req.Start {
 			if err := dom.Create(); err != nil {
-				return fmt.Errorf("start domain: %w", err)
+				return fmt.Errorf("start domain: %w", asStorageUnavailable(err))
 			}
 		}
 		return nil
@@ -310,7 +321,9 @@ func (p *Provider) StartVirtualMachine(_ context.Context, id string) (types.Virt
 		case libvirt.DOMAIN_PAUSED, libvirt.DOMAIN_PMSUSPENDED:
 			return dom.Resume()
 		default:
-			return dom.Create()
+			// A boot is where a path the backend can reach but the hypervisor
+			// cannot finally bites; say so instead of returning a raw 500.
+			return asStorageUnavailable(dom.Create())
 		}
 	})
 	if err != nil {

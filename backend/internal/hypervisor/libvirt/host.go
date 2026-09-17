@@ -35,6 +35,7 @@ type Provider struct {
 // isoDir backs the ISO library used for install-media attachments.
 // The connection is established lazily and re-established on failure.
 func New(uri, isoDir string) *Provider {
+	logIsoDirVisibility(isoDir)
 	return &Provider{uri: uri, isoDir: isoDir, samples: make(map[string]*vmSample)}
 }
 
