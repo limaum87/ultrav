@@ -33,6 +33,27 @@ docker run --rm -p 8275:8080 -v /var/run/libvirt:/var/run/libvirt ultrav-backend
 
 O frontend continua sendo só o `deploy/docker-compose.yml` (serviço `frontend`) apontando para o backend do host.
 
+### Biblioteca de ISOs com backend em container
+
+O backend grava o caminho do ISO no XML do domínio, mas quem abre o arquivo é o **qemu, no host**. Por isso, em modo libvirt o diretório de ISOs precisa ser um bind mount de **caminho idêntico** nos dois lados — um volume nomeado (o default do compose) faz o upload funcionar e a VM falhar só no start, com `Cannot access storage file`:
+
+```yaml
+services:
+  backend:
+    environment:
+      ULTRAV_ISO_DIR: /var/lib/libvirt/isos
+    volumes:
+      - /var/lib/libvirt/isos:/var/lib/libvirt/isos
+```
+
+O diretório precisa ser gravável pelo usuário do container (`nobody`, que entra no grupo `kvm` via `group_add`):
+
+```bash
+sudo chgrp kvm /var/lib/libvirt/isos && sudo chmod 2775 /var/lib/libvirt/isos
+```
+
+A mesma regra vale para qualquer diretório cujo caminho acabe no XML do domínio (pools de disco, por exemplo).
+
 ## Desenvolvimento sem Docker
 
 ```bash

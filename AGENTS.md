@@ -120,9 +120,24 @@ cd deploy
 # edite docker-compose.yml do serviço backend:
 #   volumes:
 #     - /var/run/libvirt:/var/run/libvirt
+#     - /var/lib/libvirt/isos:/var/lib/libvirt/isos   # ver aviso abaixo
 #   environment:
 #     HYPERVISOR_PROVIDER: libvirt
+#     ULTRAV_ISO_DIR: /var/lib/libvirt/isos
 docker compose up -d --build
+```
+
+**Regra dos caminhos (backend em container + libvirt real).** O backend grava
+caminhos absolutos no XML do domínio (ISOs, volumes de disco), mas quem abre
+esses arquivos é o **qemu, no host**. Todo diretório que alimenta o XML precisa
+ser um bind mount de **caminho idêntico** dentro e fora do container — nunca um
+volume nomeado. Com volume nomeado o upload funciona, a validação de existência
+(feita dentro do container) passa, e a VM só falha no start com
+`Cannot access storage file`. O diretório também precisa ser gravável pelo
+usuário do container (`nobody`):
+
+```bash
+sudo chgrp kvm /var/lib/libvirt/isos && sudo chmod 2775 /var/lib/libvirt/isos
 ```
 
 O frontend continua sendo servido pelo serviço `frontend` (porta 8275) e faz proxy do `/api` para o backend — se o backend rodar nativo na porta 8080 do host, ajuste o `proxy_pass` em `frontend/nginx.conf` para `http://host.docker.internal:8080` (Linux: adicione `extra_hosts: ["host.docker.internal:host-gateway"]`).
@@ -168,6 +183,7 @@ curl -s http://localhost:8275/api/v1/vms | grep ultrav-test
 | `/api/v1/ready` retorna 503 com `hypervisor: unavailable` | daemon libvirt parado ou socket inacessível | `sudo systemctl start libvirtd`; confira permissão de grupo no socket `ls -l /var/run/libvirt/libvirt-sock` |
 | `cannot connect to libvirt (qemu:///system)` nos logs | container sem o socket montado | monte `-v /var/run/libvirt:/var/run/libvirt` no serviço backend |
 | VMs listadas mas sem `ipAddress` | QEMU Guest Agent não instalado no guest | instale `qemu-guest-agent` dentro da VM (normal: IP fica `null`) |
+| `Cannot access storage file '<dir>/<arquivo>.iso'` ao ligar a VM | backend em container com a biblioteca de ISOs em volume nomeado: o caminho do XML não existe no host | bind mount de caminho idêntico + `ULTRAV_ISO_DIR` (ver "Regra dos caminhos", Fase 4). Para destravar já: copie o ISO para o diretório que o host enxerga |
 | `startVirtualMachine` retorna 500 em host sem `/dev/kvm` | domínio exige KVM e o host não tem | use modo mock ou habilite nested virtualization na BIOS do hipervisor físico |
 | Porta 8275 ocupada | outro serviço | mude a porta publicada no `deploy/docker-compose.yml` (`"8275:80"`) |
 | UI abre mas sem dados | backend caiu ou proxy errado | `docker compose -f deploy/docker-compose.yml ps` + `logs backend` |
@@ -194,7 +210,7 @@ Marque somente se **todos** passarem:
 | `HYPERVISOR_LIBVIRT_URI` | `qemu:///system` | URI de conexão do libvirt (`qemu+ssh://host/system` também funciona) |
 | `ULTRAV_PORT` | `8080` | Porta interna do backend (externa no compose: 8275 via nginx) |
 | `ULTRAV_CORS_ORIGIN` | *(vazio)* | Origin do frontend quando acessado fora do proxy (compose não precisa) |
-| `ULTRAV_ISO_DIR` | `/var/lib/libvirt/images/isos` | Diretório da biblioteca de ISOs (upload via UI; anexada como mídia de instalação no wizard). No compose aponta para o volume `ultrav-isos` (`/var/lib/ultrav/isos`) |
+| `ULTRAV_ISO_DIR` | `/var/lib/libvirt/images/isos` | Diretório da biblioteca de ISOs (upload via UI; anexada como mídia de instalação no wizard). No compose em modo mock aponta para o volume `ultrav-isos` (`/var/lib/ultrav/isos`); **em modo libvirt precisa ser um bind mount de caminho idêntico ao do host** (ver "Regra dos caminhos", Fase 4) |
 
 ## O que o agente NÃO deve fazer
 

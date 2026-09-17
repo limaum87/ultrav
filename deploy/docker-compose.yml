@@ -7,6 +7,9 @@ services:
       HYPERVISOR_PROVIDER: mock
       ULTRAV_PORT: "8080"
       ULTRAV_CORS_ORIGIN: ""
+      # Modo mock: qualquer caminho serve. Modo libvirt: veja o aviso no
+      # volume `ultrav-isos` no fim deste arquivo — o caminho precisa ser
+      # idêntico dentro do container e no host.
       ULTRAV_ISO_DIR: /var/lib/ultrav/isos
       ULTRAV_DB_PATH: /var/lib/ultrav/data/ultrav.db
       # Senha do admin inicial (criado só na primeira inicialização, banco vazio).
@@ -38,5 +41,22 @@ services:
     restart: unless-stopped
 
 volumes:
+  # ATENÇÃO — volume nomeado só serve para HYPERVISOR_PROVIDER=mock.
+  #
+  # Com libvirt real, o backend grava o caminho do ISO no XML do domínio e
+  # quem abre o arquivo é o qemu, NO HOST. Um volume nomeado faz
+  # /var/lib/ultrav/isos significar coisas diferentes nos dois namespaces:
+  # o upload funciona, o os.Stat de validação passa dentro do container e a
+  # VM só quebra no start, com
+  #   Cannot access storage file '/var/lib/ultrav/isos/<arquivo>.iso'
+  #
+  # Em modo libvirt, substitua por um bind mount de caminho idêntico (o
+  # docker-compose.override.yml do host de produção faz isso):
+  #   environment:
+  #     ULTRAV_ISO_DIR: /var/lib/libvirt/isos
+  #   volumes:
+  #     - /var/lib/libvirt/isos:/var/lib/libvirt/isos
+  # O diretório precisa ser gravável pelo usuário do container (`nobody`):
+  #   sudo chgrp kvm /var/lib/libvirt/isos && sudo chmod 2775 /var/lib/libvirt/isos
   ultrav-isos:
   ultrav-data:
