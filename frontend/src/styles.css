@@ -980,7 +980,8 @@ tr.row-busy { opacity: 0.55; }
   padding: 8px 14px; font-size: 12px; color: var(--text-dim);
   border-bottom: 1px solid var(--border); background: var(--bg-elev2);
 }
-.console-hint { margin-left: auto; opacity: 0.75; }
+.console-toolbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.console-hint { opacity: 0.75; }
 .console-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .console-dot-connecting { background: #d29922; animation: pulse 1.2s infinite; }
 .console-dot-connected { background: #3fb950; }

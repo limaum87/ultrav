@@ -3,7 +3,7 @@ import RFB from '@novnc/novnc';
 import type { VirtualMachine } from '../api/client';
 import { getToken } from '../api/client';
 import { StateBadge } from './ui';
-import { Monitor } from 'lucide-react';
+import { Monitor, Keyboard } from 'lucide-react';
 
 /**
  * VNC console panel (noVNC) backed by the WebSocket proxy at
@@ -17,6 +17,24 @@ export function ConsolePanel({ vm }: { vm: VirtualMachine }) {
   const [unavailable, setUnavailable] = useState(false);
   const [retry, setRetry] = useState(0);
   const running = vm.state === 'running';
+  const [cadSent, setCadSent] = useState(false);
+  const cadTimer = useRef<number | null>(null);
+
+  // Ctrl+Alt+Del never reaches the guest from a browser: the host OS (or the
+  // browser) claims it first, which is exactly why a Windows login screen is
+  // unreachable from the console. noVNC injects the sequence over RFB instead.
+  function sendCtrlAltDel() {
+    const rfb = rfbRef.current;
+    if (!rfb) return;
+    rfb.sendCtrlAltDel();
+    // Keep subsequent typing going to the VM, not to the button.
+    rfb.focus();
+    setCadSent(true);
+    if (cadTimer.current) window.clearTimeout(cadTimer.current);
+    cadTimer.current = window.setTimeout(() => setCadSent(false), 1600);
+  }
+
+  useEffect(() => () => { if (cadTimer.current) window.clearTimeout(cadTimer.current); }, []);
 
   // Preflight: a failed WS handshake gives noVNC no error details, so ask the
   // endpoint first to distinguish "no graphics device" from transient errors.
@@ -107,11 +125,22 @@ export function ConsolePanel({ vm }: { vm: VirtualMachine }) {
       <div className="console-toolbar">
         <span className={`console-dot console-dot-${status}`} />
         {status === 'connecting' ? 'Connecting to console…' : status === 'connected' ? 'Console connected' : 'Console disconnected — retrying…'}
-        {status === 'connected' && (
-          // Guests blank their display when idle; the VNC framebuffer is then
-          // genuinely black until the guest receives input.
-          <span className="console-hint">Black screen? Move the mouse or press a key to wake the VM.</span>
-        )}
+        <div className="console-toolbar-actions">
+          {status === 'connected' && (
+            // Guests blank their display when idle; the VNC framebuffer is then
+            // genuinely black until the guest receives input.
+            <span className="console-hint">Black screen? Move the mouse or press a key to wake the VM.</span>
+          )}
+          <button
+            type="button"
+            className="btn btn-with-icon"
+            onClick={sendCtrlAltDel}
+            disabled={status !== 'connected'}
+            title="Send Ctrl+Alt+Del to the guest (the host keyboard cannot). Windows opens its security screen; most Linux guests reboot."
+          >
+            <Keyboard size={13} strokeWidth={2} aria-hidden /> {cadSent ? 'Sent' : 'Ctrl+Alt+Del'}
+          </button>
+        </div>
       </div>
       <div ref={containerRef} className="console-screen" />
     </div>
