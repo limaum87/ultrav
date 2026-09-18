@@ -332,6 +332,22 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      operationId: deleteStoragePool
+      tags: [Storage]
+      summary: Remove a storage pool from the listing
+      description: >
+        Undefines the storage pool (deactivating it first if needed) so it disappears from
+        the listing. No data is deleted: volumes, disk images and files on disk are kept intact.
+      parameters: [ { $ref: '#/components/parameters/ResourceID' } ]
+      responses:
+        '204': { description: Pool removed from the listing (data untouched) }
+        '404':
+          description: Storage pool not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /storage/pools/{id}/refresh:
     post:

@@ -37,6 +37,21 @@ func (p *Provider) GetStoragePool(_ context.Context, id string) (types.StoragePo
 	return types.StoragePool{}, hypervisor.ErrPoolNotFound
 }
 
+// DeleteStoragePool removes a simulated pool from the listing. Like the
+// libvirt provider, no backing data is touched.
+func (p *Provider) DeleteStoragePool(_ context.Context, id string) error {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	for i, pool := range pools {
+		if pool.id == id {
+			pools = append(pools[:i], pools[i+1:]...)
+			return nil
+		}
+	}
+	return hypervisor.ErrPoolNotFound
+}
+
 // CreateStoragePool registers a new simulated directory pool.
 func (p *Provider) CreateStoragePool(_ context.Context, req types.StoragePoolCreate) (types.StoragePool, error) {
 	poolMu.Lock()

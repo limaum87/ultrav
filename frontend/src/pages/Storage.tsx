@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { api, unwrap, ApiError, type StoragePool } from '../api/client';
 import { formatBytes, usePolling } from '../lib/hooks';
-import { ActionMenu, EmptyState, MetricCard, TableSkeleton, type MenuItem } from '../components/ui';
+import { ActionMenu, ConfirmDialog, EmptyState, MetricCard, TableSkeleton, type MenuItem } from '../components/ui';
 import { IsoLibrary } from '../components/IsoLibrary';
 import { CreatePoolModal } from '../components/CreatePoolModal';
 import { useToast } from '../components/Toast';
@@ -11,6 +11,7 @@ export default function Storage() {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [poolModalOpen, setPoolModalOpen] = useState(false);
+  const [poolToRemove, setPoolToRemove] = useState<StoragePool | null>(null);
   const { data, error, loading, refresh } = usePolling(async () =>
     unwrap(api.GET('/storage/pools')),
   );
@@ -21,6 +22,22 @@ export default function Storage() {
       try {
         await unwrap(api.POST('/storage/pools/{id}/refresh', { params: { path: { id: pool.id } } }));
         toast.push('success', `${pool.name}: refresh requested`);
+        await refresh();
+      } catch (e) {
+        toast.push('error', e instanceof ApiError ? `${pool.name}: ${e.code} — ${e.message}` : String(e));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refresh, toast],
+  );
+
+  const removePool = useCallback(
+    async (pool: StoragePool) => {
+      setBusy(pool.id);
+      try {
+        await unwrap(api.DELETE('/storage/pools/{id}', { params: { path: { id: pool.id } } }));
+        toast.push('success', `${pool.name}: removed from the listing (data kept)`);
         await refresh();
       } catch (e) {
         toast.push('error', e instanceof ApiError ? `${pool.name}: ${e.code} — ${e.message}` : String(e));
@@ -103,6 +120,13 @@ export default function Storage() {
                     disabled: busy === pool.id || pool.state !== 'active',
                     title: 'Re-sync pool usage with the backing storage',
                   },
+                  {
+                    label: 'Remove from list',
+                    danger: true,
+                    onSelect: () => setPoolToRemove(pool),
+                    disabled: busy === pool.id,
+                    title: 'Undefine the pool; files and volumes on disk are kept',
+                  },
                 ];
                 return (
                   <tr key={pool.id} className={busy === pool.id ? 'row-busy' : undefined}>
@@ -145,6 +169,26 @@ export default function Storage() {
         open={poolModalOpen}
         onClose={() => setPoolModalOpen(false)}
         onCreated={() => void refresh()}
+      />
+
+      <ConfirmDialog
+        open={poolToRemove !== null}
+        title={`Remove "${poolToRemove?.name ?? ''}" from the listing?`}
+        message={
+          <>
+            The storage pool definition will be removed and it will disappear from this list.
+            <strong> Nothing is deleted</strong>: volumes, disk images and ISO files on disk stay
+            exactly where they are. A pool can be re-created later pointing at the same path.
+          </>
+        }
+        confirmLabel="Remove Pool"
+        busy={busy === poolToRemove?.id}
+        onCancel={() => setPoolToRemove(null)}
+        onConfirm={() => {
+          const p = poolToRemove;
+          setPoolToRemove(null);
+          if (p) void removePool(p);
+        }}
       />
     </div>
   );

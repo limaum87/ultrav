@@ -85,6 +85,7 @@ func (s *Server) routes() {
 	mux.HandleFunc("GET /api/v1/storage/pools", s.handleListStoragePools)
 	mux.HandleFunc("POST /api/v1/storage/pools", s.handleCreateStoragePool)
 	mux.HandleFunc("GET /api/v1/storage/pools/{id}", s.requireValidVMID(s.handleGetStoragePool))
+	mux.HandleFunc("DELETE /api/v1/storage/pools/{id}", s.requireValidVMID(s.handleDeleteStoragePool))
 	mux.HandleFunc("POST /api/v1/storage/pools/{id}/refresh", s.requireValidVMID(s.handleRefreshStoragePool))
 
 	// ISO library
@@ -361,6 +362,16 @@ func validateCreateStoragePool(req *types.StoragePoolCreate) string {
 		return "only 'dir' storage pools are supported"
 	}
 	return ""
+}
+
+	// handleDeleteStoragePool removes a pool from the listing (undefine only).
+// Volumes, disk images and files on disk are never deleted.
+func (s *Server) handleDeleteStoragePool(w http.ResponseWriter, r *http.Request) {
+	if err := s.provider.DeleteStoragePool(r.Context(), r.PathValue("id")); err != nil {
+		s.writeProviderError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleGetStoragePool(w http.ResponseWriter, r *http.Request) {

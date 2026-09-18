@@ -115,6 +115,24 @@ func (p *Provider) CreateStoragePool(_ context.Context, req types.StoragePoolCre
 	return p.GetStoragePool(context.Background(), req.Name)
 }
 
+// DeleteStoragePool undefines the pool, deactivating it first if needed.
+// Volumes and files on disk are NOT deleted — only the pool definition goes
+// away, so it disappears from the listing while the data stays intact.
+func (p *Provider) DeleteStoragePool(_ context.Context, id string) error {
+	return p.withConn(func(c *libvirt.Connect) error {
+		pool, err := c.LookupStoragePoolByName(id)
+		if err != nil {
+			return hypervisor.ErrPoolNotFound
+		}
+		if active, err := pool.IsActive(); err == nil && active {
+			if err := pool.Destroy(); err != nil {
+				return err
+			}
+		}
+		return pool.Undefine()
+	})
+}
+
 func (p *Provider) RefreshStoragePool(_ context.Context, id string) (types.StoragePool, error) {
 	err := p.withConn(func(c *libvirt.Connect) error {
 		pool, err := c.LookupStoragePoolByName(id)

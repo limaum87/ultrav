@@ -52,6 +52,9 @@ type Provider interface {
 	GetStoragePool(ctx context.Context, id string) (types.StoragePool, error)
 	CreateStoragePool(ctx context.Context, req types.StoragePoolCreate) (types.StoragePool, error)
 	RefreshStoragePool(ctx context.Context, id string) (types.StoragePool, error)
+	// DeleteStoragePool removes the pool from the hypervisor listing
+	// (undefines it). No volume or file on disk is deleted.
+	DeleteStoragePool(ctx context.Context, id string) error
 
 	ListNetworks(ctx context.Context) ([]types.Network, error)
 	GetNetwork(ctx context.Context, id string) (types.Network, error)

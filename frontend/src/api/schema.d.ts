@@ -235,7 +235,11 @@ export interface paths {
         get: operations["getStoragePool"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a storage pool from the listing
+         * @description Undefines the storage pool (deactivating it first if needed) so it disappears from the listing. No data is deleted: volumes, disk images and files on disk are kept intact.
+         */
+        delete: operations["deleteStoragePool"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1884,6 +1888,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["StoragePool"];
                 };
+            };
+            /** @description Storage pool not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteStoragePool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource identifier (libvirt name). */
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pool removed from the listing (data untouched) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Storage pool not found */
             404: {
