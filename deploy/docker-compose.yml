@@ -4,13 +4,14 @@ services:
       context: ..
       dockerfile: backend/Dockerfile
     environment:
-      HYPERVISOR_PROVIDER: mock
+      HYPERVISOR_PROVIDER: libvirt
       ULTRAV_PORT: "8080"
       ULTRAV_CORS_ORIGIN: ""
       # Modo mock: qualquer caminho serve. Modo libvirt: veja o aviso no
       # volume `ultrav-isos` no fim deste arquivo — o caminho precisa ser
       # idêntico dentro do container e no host.
-      ULTRAV_ISO_DIR: /var/lib/ultrav/isos
+      # Modo libvirt: bind mount de caminho idêntico (Regra dos caminhos, AGENTS.md Fase 4)
+      ULTRAV_ISO_DIR: /var/lib/libvirt/isos
       ULTRAV_DB_PATH: /var/lib/ultrav/data/ultrav.db
       # Senha do admin inicial (criado só na primeira inicialização, banco vazio).
       # Se vazia, uma senha aleatória é gerada e registrada no log do backend.
@@ -19,8 +20,12 @@ services:
       # Defina um segredo fixo para que as sessões sobrevivam a restarts:
       # ULTRAV_JWT_SECRET: troque-por-um-segredo-longo
     volumes:
-      - ultrav-isos:/var/lib/ultrav/isos
+      - /var/run/libvirt:/var/run/libvirt
+      - /var/lib/libvirt/isos:/var/lib/libvirt/isos
       - ultrav-data:/var/lib/ultrav/data
+    # Acesso ao socket do libvirt (rw-rw---- root:libvirt, gid 137 no host)
+    group_add:
+      - "137"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
