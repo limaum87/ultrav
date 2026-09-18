@@ -919,6 +919,12 @@ export interface components {
              * @example true
              */
             autostart: boolean;
+            /**
+             * @description When true
+             * @default false
+             * @example true
+             */
+            isoLibrary: boolean;
         };
         StoragePoolList: {
             items: components["schemas"]["StoragePool"][];

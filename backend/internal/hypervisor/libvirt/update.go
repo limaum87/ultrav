@@ -77,7 +77,7 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 				if !iso.ValidID.MatchString(isoID) {
 					return fmt.Errorf("%w: invalid ISO filename", os.ErrInvalid)
 				}
-				path := filepath.Join(p.isoDir, isoID)
+				path := filepath.Join(p.isoDir(), isoID)
 				if _, err := os.Stat(path); err != nil {
 					return hypervisor.ErrIsoNotFound
 				}

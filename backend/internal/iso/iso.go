@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,8 +25,11 @@ var ErrNotFound = errors.New("ISO image was not found")
 // ErrAlreadyExists is returned when uploading over an existing filename.
 var ErrAlreadyExists = errors.New("an ISO image with this filename already exists")
 
-// Store is the filesystem-backed ISO library.
+// Store is the filesystem-backed ISO library. The backing directory can be
+// switched at runtime (SetDir) — e.g. when a storage pool is promoted to be
+// the ISO library — so all reads of dir are guarded by a mutex.
 type Store struct {
+	mu  sync.RWMutex
 	dir string
 }
 
@@ -42,11 +46,30 @@ func New(dir string) (*Store, error) {
 
 // Dir returns the backing directory (used by the libvirt provider to
 // resolve attachment paths).
-func (s *Store) Dir() string { return s.dir }
+func (s *Store) Dir() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dir
+}
+
+// SetDir points the library at a new directory (created if missing).
+// Existing ISO ids resolve against the new directory afterwards.
+func (s *Store) SetDir(dir string) error {
+	if dir == "" {
+		return os.ErrInvalid
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.dir = dir
+	s.mu.Unlock()
+	return nil
+}
 
 // List returns every .iso file in the library, sorted by name.
 func (s *Store) List() ([]types.Iso, error) {
-	entries, err := os.ReadDir(s.dir)
+	entries, err := os.ReadDir(s.Dir())
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +94,12 @@ func (s *Store) Create(name string, r io.Reader) (types.Iso, error) {
 	if !ValidID.MatchString(name) {
 		return types.Iso{}, os.ErrInvalid
 	}
-	dst := s.path(name)
+	dir := s.Dir()
+	dst := filepath.Join(dir, name)
 	if _, err := os.Stat(dst); err == nil {
 		return types.Iso{}, ErrAlreadyExists
 	}
-	tmp, err := os.CreateTemp(s.dir, ".upload-*")
+	tmp, err := os.CreateTemp(dir, ".upload-*")
 	if err != nil {
 		return types.Iso{}, err
 	}
@@ -106,7 +130,7 @@ func (s *Store) Delete(id string) error {
 	if !ValidID.MatchString(id) {
 		return os.ErrInvalid
 	}
-	if err := os.Remove(s.path(id)); err != nil {
+	if err := os.Remove(filepath.Join(s.Dir(), id)); err != nil {
 		if os.IsNotExist(err) {
 			return ErrNotFound
 		}
@@ -120,14 +144,12 @@ func (s *Store) Path(id string) (string, error) {
 	if !ValidID.MatchString(id) {
 		return "", os.ErrInvalid
 	}
-	p := s.path(id)
+	p := filepath.Join(s.Dir(), id)
 	if _, err := os.Stat(p); err != nil {
 		return "", ErrNotFound
 	}
 	return p, nil
 }
-
-func (s *Store) path(id string) string { return filepath.Join(s.dir, id) }
 
 func toModel(name string, info os.FileInfo) types.Iso {
 	uploaded := info.ModTime().Round(time.Second).UTC()

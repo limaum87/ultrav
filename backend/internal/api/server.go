@@ -20,6 +20,7 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/auth"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
 	"github.com/ultrav/ultrav/backend/internal/iso"
+	"github.com/ultrav/ultrav/backend/internal/settings"
 )
 
 //go:embed openapi.json
@@ -30,15 +31,16 @@ type Server struct {
 	provider hypervisor.Provider
 	isos     *iso.Store
 	authn    *auth.Service // nil disables authentication (tests)
+	settings *settings.Store // nil disables persistence of runtime settings
 	log      *slog.Logger
 	router   *http.ServeMux
 }
 
 // NewServer builds the API server. Pass a non-nil auth service to require
-// bearer tokens on protected endpoints. The generated openapi.json is
-// embedded and served at /openapi.json with Swagger UI at /docs.
-func NewServer(provider hypervisor.Provider, isos *iso.Store, authn *auth.Service, log *slog.Logger) *Server {
-	s := &Server{provider: provider, isos: isos, authn: authn, log: log, router: http.NewServeMux()}
+// bearer tokens on protected endpoints and a non-nil settings store to
+// persist runtime settings (e.g. the ISO library directory override).
+func NewServer(provider hypervisor.Provider, isos *iso.Store, authn *auth.Service, st *settings.Store, log *slog.Logger) *Server {
+	s := &Server{provider: provider, isos: isos, authn: authn, settings: st, log: log, router: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -328,6 +330,20 @@ func (s *Server) handleCreateStoragePool(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		s.writeProviderError(w, r, err)
 		return
+	}
+	// Optional: promote the pool's directory to be the ISO library, so an
+	// existing folder full of .iso files can be reused without re-uploading.
+	if req.IsoLibrary != nil && *req.IsoLibrary {
+		if err := s.isos.SetDir(req.TargetPath); err != nil {
+			s.writeError(w, r, CodeInternalError, "pool created, but failed to use its directory as the ISO library: "+err.Error())
+			return
+		}
+		if s.settings != nil {
+			if err := s.settings.SetIsoDir(req.TargetPath); err != nil {
+				s.log.Warn("failed to persist ISO library directory override", "dir", req.TargetPath, "err", err)
+			}
+		}
+		s.log.Info("ISO library directory changed", "dir", req.TargetPath)
 	}
 	writeJSON(w, http.StatusCreated, pool)
 }

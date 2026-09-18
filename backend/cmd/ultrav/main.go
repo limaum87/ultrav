@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/libvirt"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/mock"
 	"github.com/ultrav/ultrav/backend/internal/iso"
+	"github.com/ultrav/ultrav/backend/internal/settings"
 )
 
 func main() {
@@ -31,18 +33,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	provider, err := newProvider(cfg.Provider, cfg)
-	if err != nil {
-		log.Error("failed to create hypervisor provider", "provider", cfg.Provider, "err", err)
-		os.Exit(1)
-	}
-	log.Info("hypervisor provider selected", "provider", cfg.Provider, "uri", cfg.LibvirtURI)
-
 	isos, err := iso.New(cfg.IsoDir)
 	if err != nil {
 		log.Error("failed to create ISO library", "dir", cfg.IsoDir, "err", err)
 		os.Exit(1)
 	}
+
+	// Runtime settings (persisted): the ISO library directory can be changed
+	// via the API (storage pool promoted to ISO library) and survives restarts.
+	settingsPath := os.Getenv("ULTRAV_SETTINGS_PATH")
+	if settingsPath == "" {
+		settingsPath = filepath.Join(filepath.Dir(cfg.DBPath), "settings.json")
+	}
+	st, err := settings.Open(settingsPath)
+	if err != nil {
+		log.Error("failed to open settings", "path", settingsPath, "err", err)
+		os.Exit(1)
+	}
+	if d := st.IsoDir(); d != "" && d != cfg.IsoDir {
+		log.Info("using persisted ISO library directory override", "dir", d)
+		if err := isos.SetDir(d); err != nil {
+			log.Error("failed to use persisted ISO library directory", "dir", d, "err", err)
+			os.Exit(1)
+		}
+	}
+
+	provider, err := newProvider(cfg.Provider, cfg, isos)
+	if err != nil {
+		log.Error("failed to create hypervisor provider", "provider", cfg.Provider, "err", err)
+		os.Exit(1)
+	}
+	log.Info("hypervisor provider selected", "provider", cfg.Provider, "uri", cfg.LibvirtURI)
 
 	// Auth: SQLite user store + JWT bearer tokens (nil would disable auth).
 	authn, err := auth.Open(cfg.DBPath, cfg.JWTSecret, log)
@@ -56,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := api.NewServer(provider, isos, authn, log)
+	srv := api.NewServer(provider, isos, authn, st, log)
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Handler(),
@@ -88,12 +109,12 @@ func main() {
 
 // newProvider instantiates the concrete HypervisorProvider. This is the only
 // place in the codebase that knows the concrete implementations.
-func newProvider(p config.Provider, cfg config.Config) (hypervisor.Provider, error) {
+func newProvider(p config.Provider, cfg config.Config, isos *iso.Store) (hypervisor.Provider, error) {
 	switch p {
 	case config.ProviderMock:
 		return mock.New(), nil
 	case config.ProviderLibvirt:
-		return libvirt.New(cfg.LibvirtURI, cfg.IsoDir), nil
+		return libvirt.New(cfg.LibvirtURI, isos.Dir), nil
 	}
 	return nil, errors.New("unknown provider")
 }

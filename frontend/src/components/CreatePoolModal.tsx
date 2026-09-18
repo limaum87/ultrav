@@ -17,6 +17,7 @@ export function CreatePoolModal({
   const [name, setName] = useState('');
   const [targetPath, setTargetPath] = useState('');
   const [autostart, setAutostart] = useState(true);
+  const [isoLibrary, setIsoLibrary] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export function CreatePoolModal({
     try {
       await unwrap(
         api.POST('/storage/pools', {
-          body: { name, type: 'dir', targetPath, autostart },
+          body: { name, type: 'dir', targetPath, autostart, isoLibrary },
         }),
       );
       onCreated();
@@ -97,6 +98,21 @@ export function CreatePoolModal({
             />
             <span>Start pool automatically on boot (autostart)</span>
           </label>
+          <label className="field field-check">
+            <input
+              type="checkbox"
+              checked={isoLibrary}
+              onChange={(e) => setIsoLibrary(e.target.checked)}
+              disabled={submitting}
+            />
+            <span>Use this directory as the ISO library</span>
+          </label>
+          {isoLibrary && (
+            <p className="wiz-note" style={{ margin: 0, fontSize: 13, opacity: 0.7 }}>
+              Every <code>.iso</code> already in <span className="mono">{targetPath || '/path'}</span> will appear in the ISO
+              Library and in the VM creation wizard — no re-upload needed. This choice persists across restarts.
+            </p>
+          )}
           <p className="wiz-note" style={{ margin: 0, fontSize: 13, opacity: 0.7 }}>
             Only directory-based pools (type <code>dir</code>) are supported for now.
           </p>

@@ -476,6 +476,9 @@ type StoragePoolType string
 type StoragePoolCreate struct {
 	Autostart *bool `json:"autostart,omitempty"`
 
+	// IsoLibrary When true
+	IsoLibrary *bool `json:"isoLibrary,omitempty"`
+
 	// Name Same rules as resource ids (a-z0-9._-
 	Name string `json:"name"`
 

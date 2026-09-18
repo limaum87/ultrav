@@ -19,8 +19,10 @@ import (
 
 // Provider talks to a libvirt daemon.
 type Provider struct {
-	uri    string
-	isoDir string
+	uri string
+	// isoDir is read on every use: the ISO library directory can be switched
+	// at runtime (e.g. a storage pool promoted to ISO library).
+	isoDir func() string
 
 	mu   sync.Mutex
 	conn *libvirt.Connect
@@ -34,8 +36,8 @@ type Provider struct {
 // New creates a provider for the given libvirt URI (e.g. qemu:///system).
 // isoDir backs the ISO library used for install-media attachments.
 // The connection is established lazily and re-established on failure.
-func New(uri, isoDir string) *Provider {
-	logIsoDirVisibility(isoDir)
+func New(uri string, isoDir func() string) *Provider {
+	logIsoDirVisibility(isoDir())
 	return &Provider{uri: uri, isoDir: isoDir, samples: make(map[string]*vmSample)}
 }
 

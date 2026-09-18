@@ -2281,6 +2281,13 @@
             "type": "boolean",
             "default": true,
             "example": true
+          },
+          "isoLibrary": {
+            "type": "boolean",
+            "default": false,
+            "example": true,
+            "description": "When true",
+            "also points the ISO library at targetPath \u2014 existing .iso files in that directory become available in the ISO library and to the VM wizard. Persists across restarts.": null
           }
         }
       },

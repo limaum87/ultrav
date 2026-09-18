@@ -182,7 +182,7 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 			if !iso.ValidID.MatchString(*req.IsoId) {
 				return fmt.Errorf("%w: invalid ISO filename", os.ErrInvalid)
 			}
-			path := filepath.Join(p.isoDir, *req.IsoId)
+			path := filepath.Join(p.isoDir(), *req.IsoId)
 			if _, err := os.Stat(path); err != nil {
 				return hypervisor.ErrIsoNotFound
 			}
@@ -196,7 +196,7 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 			if !iso.ValidID.MatchString(*req.VirtioDriversIsoId) {
 				return fmt.Errorf("%w: invalid VirtIO drivers ISO filename", os.ErrInvalid)
 			}
-			path := filepath.Join(p.isoDir, *req.VirtioDriversIsoId)
+			path := filepath.Join(p.isoDir(), *req.VirtioDriversIsoId)
 			if _, err := os.Stat(path); err != nil {
 				return hypervisor.ErrIsoNotFound
 			}

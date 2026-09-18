@@ -1155,6 +1155,7 @@ components:
         type: { type: string, enum: [dir], default: dir, example: dir, description: Only directory pools are supported for now }
         targetPath: { type: string, example: /var/lib/libvirt/isos, description: Absolute host path; created if missing }
         autostart: { type: boolean, default: true, example: true }
+        isoLibrary: { type: boolean, default: false, example: true, description: When true, also points the ISO library at targetPath — existing .iso files in that directory become available in the ISO library and to the VM wizard. Persists across restarts. }
 
     StoragePoolList:
       type: object

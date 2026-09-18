@@ -210,7 +210,8 @@ Marque somente se **todos** passarem:
 | `HYPERVISOR_LIBVIRT_URI` | `qemu:///system` | URI de conexão do libvirt (`qemu+ssh://host/system` também funciona) |
 | `ULTRAV_PORT` | `8080` | Porta interna do backend (externa no compose: 8275 via nginx) |
 | `ULTRAV_CORS_ORIGIN` | *(vazio)* | Origin do frontend quando acessado fora do proxy (compose não precisa) |
-| `ULTRAV_ISO_DIR` | `/var/lib/libvirt/images/isos` | Diretório da biblioteca de ISOs (upload via UI; anexada como mídia de instalação no wizard). No compose em modo mock aponta para o volume `ultrav-isos` (`/var/lib/ultrav/isos`); **em modo libvirt precisa ser um bind mount de caminho idêntico ao do host** (ver "Regra dos caminhos", Fase 4) |
+| `ULTRAV_ISO_DIR` | `/var/lib/libvirt/images/isos` | Diretório da biblioteca de ISOs (upload via UI; anexada como mídia de instalação no wizard). No compose em modo mock aponta para o volume `ultrav-isos` (`/var/lib/ultrav/isos`); **em modo libvirt precisa ser um bind mount de caminho idêntico ao do host** (ver "Regra dos caminhos", Fase 4). Pode ser alterado em runtime: ao criar um storage pool com `isoLibrary: true`, o `targetPath` do pool passa a ser a biblioteca de ISOs (persistido em `ULTRAV_SETTINGS_PATH`) |
+| `ULTRAV_SETTINGS_PATH` | `<dir do ULTRAV_DB_PATH>/settings.json` | Arquivo de settings persistidas (atualmente só o override do diretório da ISO library) |
 
 ## O que o agente NÃO deve fazer
 
