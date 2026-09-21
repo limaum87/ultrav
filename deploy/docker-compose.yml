@@ -23,9 +23,11 @@ services:
       - /var/run/libvirt:/var/run/libvirt
       - /var/lib/libvirt/isos:/var/lib/libvirt/isos
       - ultrav-data:/var/lib/ultrav/data
-    # Acesso ao socket do libvirt (rw-rw---- root:libvirt, gid 137 no host)
+    # Acesso ao socket do libvirt (root:libvirt, gid 137) e ao dir de ISOs
+    # (root:kvm, gid 104) no host
     group_add:
       - "137"
+      - "104"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
