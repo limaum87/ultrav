@@ -22,6 +22,11 @@ services:
     volumes:
       - /var/run/libvirt:/var/run/libvirt
       - /var/lib/libvirt/isos:/var/lib/libvirt/isos
+      # Console VNC: o backend conecta direto no socket unix da VM
+      # (/var/lib/libvirt/qemu/domain-*/vnc.sock). Sem este mount o dial
+      # falha e o fallback (OpenGraphicsFD) quebra com "Failed to recv file
+      # descriptor" — fd-passing não atravessa o bind mount do socket.
+      - /var/lib/libvirt/qemu:/var/lib/libvirt/qemu:ro
       - ultrav-data:/var/lib/ultrav/data
     # Acesso ao socket do libvirt (root:libvirt, gid 137) e ao dir de ISOs
     # (root:kvm, gid 104) no host
