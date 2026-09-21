@@ -279,7 +279,7 @@ func (p *Provider) CreateVirtualMachine(_ context.Context, req types.VirtualMach
 		defer dom.Free()
 		if req.Start != nil && *req.Start {
 			if err := dom.Create(); err != nil {
-				return fmt.Errorf("start domain: %w", asStorageUnavailable(err))
+				return fmt.Errorf("start domain: %w", asActionableError(err))
 			}
 		}
 		return nil
@@ -333,9 +333,10 @@ func (p *Provider) StartVirtualMachine(_ context.Context, id string) (types.Virt
 		case libvirt.DOMAIN_PAUSED, libvirt.DOMAIN_PMSUSPENDED:
 			return dom.Resume()
 		default:
-			// A boot is where a path the backend can reach but the hypervisor
-			// cannot finally bites; say so instead of returning a raw 500.
-			return asStorageUnavailable(dom.Create())
+			// A boot is where the well-known operator mistakes finally bite
+			// (inactive network, missing KVM, unreachable disk); say so instead
+			// of returning a raw 500.
+			return asActionableError(dom.Create())
 		}
 	})
 	if err != nil {

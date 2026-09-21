@@ -1022,7 +1022,17 @@ components:
           type: object
           required: [code, message, requestId]
           properties:
-            code: { type: string, example: VM_NOT_FOUND }
+            code: { type: string, example: VM_NOT_FOUND, description: >
+              Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE,
+              VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED,
+              STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND,
+              NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references
+              is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS,
+              ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS,
+              FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN,
+              CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file
+              the domain references), KVM_UNAVAILABLE (hardware virtualization missing or
+              inaccessible on the host), INTERNAL_ERROR. }
             message: { type: string, example: Virtual machine was not found }
             requestId: { type: string, example: req_01HV3M9Z2K }
 

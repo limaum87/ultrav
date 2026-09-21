@@ -108,6 +108,13 @@ var (
 	// a file a domain references (install ISO, disk volume). Match it with
 	// errors.Is; the concrete *StorageUnavailableError carries the path.
 	ErrStorageUnavailable = errors.New("the hypervisor cannot access a file this virtual machine references")
+	// ErrNetworkInactive is returned when a power action fails because a
+	// virtual network the domain references is not active. Match it with
+	// errors.Is; the concrete *NetworkInactiveError carries the network name.
+	ErrNetworkInactive = errors.New("a virtual network this virtual machine references is not active")
+	// ErrKVMUnavailable is returned when the hypervisor cannot start a domain
+	// because hardware virtualization (/dev/kvm) is missing or inaccessible.
+	ErrKVMUnavailable = errors.New("hardware virtualization (KVM) is not available to the hypervisor")
 )
 
 // StorageUnavailableError is the concrete form of ErrStorageUnavailable. It
@@ -133,6 +140,36 @@ func (e *StorageUnavailableError) Error() string {
 
 // Is makes errors.Is(err, ErrStorageUnavailable) match any instance.
 func (e *StorageUnavailableError) Is(target error) bool { return target == ErrStorageUnavailable }
+
+// NetworkInactiveError is the concrete form of ErrNetworkInactive; it carries
+// the network name so the operator knows exactly which one to start.
+type NetworkInactiveError struct {
+	Network string
+}
+
+func (e *NetworkInactiveError) Error() string {
+	return fmt.Sprintf("the virtual network %q is not active — start it (Networks page or `virsh net-start %s`) before powering on this virtual machine", e.Network, e.Network)
+}
+
+// Is makes errors.Is(err, ErrNetworkInactive) match any instance.
+func (e *NetworkInactiveError) Is(target error) bool { return target == ErrNetworkInactive }
+
+// KVMUnavailableError is the concrete form of ErrKVMUnavailable; Reason adds
+// detail from the underlying error when one is available.
+type KVMUnavailableError struct {
+	Reason string
+}
+
+func (e *KVMUnavailableError) Error() string {
+	msg := "hardware virtualization (KVM) is not available to the hypervisor"
+	if e.Reason != "" {
+		msg += " — " + e.Reason
+	}
+	return msg + ". Run the backend in mock mode, or enable virtualization in the BIOS / load the kvm module on the host"
+}
+
+// Is makes errors.Is(err, ErrKVMUnavailable) match any instance.
+func (e *KVMUnavailableError) Is(target error) bool { return target == ErrKVMUnavailable }
 
 type errVMNotFound struct{}
 
