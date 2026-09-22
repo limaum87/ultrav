@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { Server } from 'lucide-react';
+import wallpaper from '../assets/loginwallpaper.png';
 
 export default function Login() {
   const { login } = useAuth();
@@ -33,7 +34,12 @@ export default function Login() {
   }
 
   return (
-    <div className="login-page">
+    <div
+      className="login-page"
+      style={{
+        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), url(${wallpaper})`,
+      }}
+    >
       <form className="login-card" onSubmit={onSubmit}>
         <div className="login-brand">
           <span className="brand-mark">UV</span>

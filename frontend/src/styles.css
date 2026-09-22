@@ -1032,8 +1032,13 @@ tr.row-busy { opacity: 0.55; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)),
+    url('./assets/loginwallpaper.png') center / cover no-repeat;
   padding: 20px;
+}
+.login-card {
+  backdrop-filter: blur(8px);
 }
 .login-card {
   width: 100%;
@@ -1044,8 +1049,8 @@ tr.row-busy { opacity: 0.55; }
   padding: 32px 28px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--bg-elev);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 .login-brand {
   display: flex;
