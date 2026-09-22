@@ -35,6 +35,8 @@ const (
 	CodeStorageUnavailable   = "STORAGE_UNAVAILABLE"
 	CodeKVMUnavailable       = "KVM_UNAVAILABLE"
 	CodeNetworkInactive      = "NETWORK_INACTIVE"
+	CodeBackupNotFound       = "BACKUP_NOT_FOUND"
+	CodeBackupInvalidState   = "BACKUP_INVALID_STATE"
 )
 
 // errorStatus maps error codes to HTTP status codes.
@@ -63,6 +65,8 @@ var errorStatus = map[string]int{
 	CodeStorageUnavailable:   http.StatusConflict,
 	CodeKVMUnavailable:       http.StatusConflict,
 	CodeNetworkInactive:      http.StatusConflict,
+	CodeBackupNotFound:       http.StatusNotFound,
+	CodeBackupInvalidState:   http.StatusConflict,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,
@@ -134,6 +138,10 @@ func (s *Server) writeProviderError(w http.ResponseWriter, r *http.Request, err 
 		} else {
 			s.writeError(w, r, CodeStorageUnavailable, err.Error())
 		}
+	case errors.Is(err, hypervisor.ErrBackupNotFound):
+		s.writeError(w, r, CodeBackupNotFound, "Backup was not found")
+	case errors.Is(err, hypervisor.ErrBackupInvalidState):
+		s.writeError(w, r, CodeBackupInvalidState, err.Error())
 	case errors.Is(err, hypervisor.ErrConsoleUnavailable):
 		s.writeError(w, r, CodeConsoleUnavailable, "This virtual machine has no graphical console configured (add a VNC <graphics> device to its domain XML)")
 	default:

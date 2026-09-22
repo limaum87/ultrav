@@ -9,7 +9,7 @@ import (
 )
 
 func TestListVirtualMachines(t *testing.T) {
-	p := New()
+	p := New("")
 	vms, err := p.ListVirtualMachines(context.Background())
 	if err != nil {
 		t.Fatalf("ListVirtualMachines: %v", err)
@@ -27,7 +27,7 @@ func TestListVirtualMachines(t *testing.T) {
 }
 
 func TestInitialState(t *testing.T) {
-	p := New()
+	p := New("")
 	ctx := context.Background()
 
 	erp, err := p.GetVirtualMachine(ctx, "erp01")
@@ -52,7 +52,7 @@ func TestInitialState(t *testing.T) {
 
 func TestPowerTransitions(t *testing.T) {
 	ctx := context.Background()
-	p := New()
+	p := New("")
 
 	// start a stopped VM
 	vm, err := p.StartVirtualMachine(ctx, "monitoring01")
@@ -93,7 +93,7 @@ func TestPowerTransitions(t *testing.T) {
 
 func TestShutdownIsGraceful(t *testing.T) {
 	ctx := context.Background()
-	p := New()
+	p := New("")
 
 	vm, err := p.ShutdownVirtualMachine(ctx, "web01")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestShutdownIsGraceful(t *testing.T) {
 
 func TestHostAndCapabilities(t *testing.T) {
 	ctx := context.Background()
-	p := New()
+	p := New("")
 
 	host, err := p.GetHost(ctx)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestHostAndCapabilities(t *testing.T) {
 }
 
 func TestReadyAndErrors(t *testing.T) {
-	p := New()
+	p := New("")
 	ctx := context.Background()
 
 	if err := p.Ready(ctx); err != nil {

@@ -629,6 +629,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/vms/{id}/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List backups of a virtual machine */
+        get: operations["listVMBackups"];
+        put?: never;
+        /**
+         * Create a full backup of a virtual machine
+         * @description Backs up every disk of the VM plus its domain configuration.
+         *
+         *     Works with the VM running or stopped. When running, the backup is
+         *     crash-consistent (block-level snapshot taken by the hypervisor via
+         *     `virDomainBackupBegin`); for application-consistent backups of
+         *     databases, shut the VM down or quiesce it first (guest-agent fsfreeze
+         *     integration arrives in a later phase).
+         *
+         *     The call is synchronous: it returns when the copy completes. Disk
+         *     images are stored as qcow2 in the server's backup directory
+         *     (`ULTRAV_BACKUP_DIR`, default `/var/lib/ultrav/backups`), one folder
+         *     per backup point, alongside a `metadata.json` and the saved
+         *     `domain.xml`.
+         */
+        post: operations["createVMBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a backup point
+         * @description Permanently removes the backup point's directory (disk images, metadata and saved domain XML). Does not touch the VM.
+         */
+        delete: operations["deleteBackup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a backup into its virtual machine
+         * @description Overwrites the disks of the VM the backup was taken from with the
+         *     backup's disk images, and restores the saved domain configuration.
+         *     The VM must exist and be stopped (409 otherwise) — restore is
+         *     destructive: the current disk contents are replaced.
+         *
+         *     The restored VM reflects the state captured by the backup (hardware
+         *     settings come from the saved `domain.xml`). Backups of VMs that no
+         *     longer exist cannot be restored in this phase (delete the old VM
+         *     metadata manually or wait for restore-as-new-VM).
+         */
+        post: operations["restoreBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vms/{id}/config-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the VM configuration (domain XML)
+         * @description Returns the libvirt domain XML of the VM, for configuration backup / disaster recovery. Cheap to call; pair it with backups for full-VM restore on a blank host.
+         */
+        get: operations["exportVMConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -710,7 +811,10 @@ export interface components {
         };
         Error: {
             error: {
-                /** @example VM_NOT_FOUND */
+                /**
+                 * @description Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), INTERNAL_ERROR.
+                 * @example VM_NOT_FOUND
+                 */
                 code: string;
                 /** @example Virtual machine was not found */
                 message: string;
@@ -1095,6 +1199,59 @@ export interface components {
             /** @example 2 */
             total: number;
         };
+        Backup: {
+            /** @example bk-20250901-120000-a1b2 */
+            id: string;
+            /** @example erp01 */
+            vmId: string;
+            /** @example erp01 */
+            vmName: string;
+            /**
+             * @example full
+             * @enum {string}
+             */
+            type: "full";
+            /**
+             * @example complete
+             * @enum {string}
+             */
+            state?: "complete";
+            /**
+             * Format: date-time
+             * @example 2025-09-01T12:00:00Z
+             */
+            createdAt: string;
+            /**
+             * Format: int64
+             * @description Total size of the backup's disk images on the backup storage.
+             * @example 34359738368
+             */
+            sizeBytes: number;
+            disks: components["schemas"]["BackupDisk"][];
+            /** @example true */
+            hasDomainXml?: boolean;
+        };
+        BackupDisk: {
+            /** @example vda */
+            name: string;
+            /** @example vda.qcow2 */
+            file: string;
+            /**
+             * @example qcow2
+             * @enum {string}
+             */
+            format?: "qcow2" | "raw";
+            /**
+             * Format: int64
+             * @example 34359738368
+             */
+            sizeBytes: number;
+        };
+        BackupList: {
+            items: components["schemas"]["Backup"][];
+            /** @example 3 */
+            total: number;
+        };
         Disk: {
             /** @example vda */
             name: string;
@@ -1301,6 +1458,24 @@ export interface components {
                  *         "code": "VM_INVALID_STATE",
                  *         "message": "Virtual machine is not running",
                  *         "requestId": "req_01HV3M9Z2L"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Backup point not found */
+        BackupNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "BACKUP_NOT_FOUND",
+                 *         "message": "Backup was not found",
+                 *         "requestId": "req_x"
                  *       }
                  *     }
                  */
@@ -2653,6 +2828,139 @@ export interface operations {
             };
             404: components["responses"]["VMNotFound"];
             409: components["responses"]["VMInvalidState"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listVMBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Virtual machine identifier (name). */
+                id: components["parameters"]["VMId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup points of this VM (newest first) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupList"];
+                };
+            };
+            404: components["responses"]["VMNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createVMBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Virtual machine identifier (name). */
+                id: components["parameters"]["VMId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup completed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backup"];
+                };
+            };
+            404: components["responses"]["VMNotFound"];
+            409: components["responses"]["VMInvalidState"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backup identifier (`bk-...`). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["BackupNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    restoreBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backup identifier (`bk-...`). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restore completed (returns the restored VM) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VirtualMachine"];
+                };
+            };
+            404: components["responses"]["BackupNotFound"];
+            /** @description VM is running, or no longer exists (code `BACKUP_INVALID_STATE`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    exportVMConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Virtual machine identifier (name). */
+                id: components["parameters"]["VMId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domain XML (content type application/xml) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                };
+            };
+            404: components["responses"]["VMNotFound"];
             500: components["responses"]["InternalError"];
         };
     };

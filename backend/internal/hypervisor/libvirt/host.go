@@ -6,6 +6,7 @@ package libvirt
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	libvirt "libvirt.org/go/libvirt"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
+	"github.com/ultrav/ultrav/backend/internal/backup"
 )
 
 // Provider talks to a libvirt daemon.
@@ -23,6 +25,9 @@ type Provider struct {
 	// isoDir is read on every use: the ISO library directory can be switched
 	// at runtime (e.g. a storage pool promoted to ISO library).
 	isoDir func() string
+
+	// backups is the on-disk backup library (see internal/backup).
+	backups *backup.Store
 
 	mu   sync.Mutex
 	conn *libvirt.Connect
@@ -34,11 +39,18 @@ type Provider struct {
 }
 
 // New creates a provider for the given libvirt URI (e.g. qemu:///system).
-// isoDir backs the ISO library used for install-media attachments.
-// The connection is established lazily and re-established on failure.
-func New(uri string, isoDir func() string) *Provider {
+// isoDir backs the ISO library used for install-media attachments and
+// backupDir the VM backup library. The connection is established lazily and
+// re-established on failure.
+func New(uri string, isoDir func() string, backupDir string) *Provider {
 	logIsoDirVisibility(isoDir())
-	return &Provider{uri: uri, isoDir: isoDir, samples: make(map[string]*vmSample)}
+	p := &Provider{uri: uri, isoDir: isoDir, samples: make(map[string]*vmSample)}
+	if st, err := backup.New(backupDir); err == nil {
+		p.backups = st
+	} else {
+		slog.Error("failed to create backup library; backup endpoints will fail", "dir", backupDir, "error", err.Error())
+	}
+	return p
 }
 
 // Ready reports whether a connection to the daemon can be established.

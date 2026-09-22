@@ -43,6 +43,10 @@
     {
       "name": "Health",
       "description": "Liveness and readiness probes"
+    },
+    {
+      "name": "Backup",
+      "description": "Virtual machine backup and restore"
     }
   ],
   "paths": {
@@ -1547,6 +1551,190 @@
           }
         }
       }
+    },
+    "/vms/{id}/backups": {
+      "get": {
+        "operationId": "listVMBackups",
+        "tags": [
+          "Backup"
+        ],
+        "summary": "List backups of a virtual machine",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VMId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backup points of this VM (newest first)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupList"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/VMNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createVMBackup",
+        "tags": [
+          "Backup"
+        ],
+        "summary": "Create a full backup of a virtual machine",
+        "description": "Backs up every disk of the VM plus its domain configuration.\n\nWorks with the VM running or stopped. When running, the backup is\ncrash-consistent (block-level snapshot taken by the hypervisor via\n`virDomainBackupBegin`); for application-consistent backups of\ndatabases, shut the VM down or quiesce it first (guest-agent fsfreeze\nintegration arrives in a later phase).\n\nThe call is synchronous: it returns when the copy completes. Disk\nimages are stored as qcow2 in the server's backup directory\n(`ULTRAV_BACKUP_DIR`, default `/var/lib/ultrav/backups`), one folder\nper backup point, alongside a `metadata.json` and the saved\n`domain.xml`.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VMId"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Backup completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Backup"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/VMNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/VMInvalidState"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/backups/{id}": {
+      "delete": {
+        "operationId": "deleteBackup",
+        "tags": [
+          "Backup"
+        ],
+        "summary": "Delete a backup point",
+        "description": "Permanently removes the backup point's directory (disk images, metadata and saved domain XML). Does not touch the VM.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Backup identifier (`bk-...`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^bk-[a-zA-Z0-9._-]{1,80}$",
+              "example": "bk-20250901-120000-a1b2"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Backup deleted"
+          },
+          "404": {
+            "$ref": "#/components/responses/BackupNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/backups/{id}/restore": {
+      "post": {
+        "operationId": "restoreBackup",
+        "tags": [
+          "Backup"
+        ],
+        "summary": "Restore a backup into its virtual machine",
+        "description": "Overwrites the disks of the VM the backup was taken from with the\nbackup's disk images, and restores the saved domain configuration.\nThe VM must exist and be stopped (409 otherwise) \u2014 restore is\ndestructive: the current disk contents are replaced.\n\nThe restored VM reflects the state captured by the backup (hardware\nsettings come from the saved `domain.xml`). Backups of VMs that no\nlonger exist cannot be restored in this phase (delete the old VM\nmetadata manually or wait for restore-as-new-VM).\n",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Backup identifier (`bk-...`).",
+            "schema": {
+              "type": "string",
+              "pattern": "^bk-[a-zA-Z0-9._-]{1,80}$",
+              "example": "bk-20250901-120000-a1b2"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restore completed (returns the restored VM)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VirtualMachine"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/BackupNotFound"
+          },
+          "409": {
+            "description": "VM is running, or no longer exists (code `BACKUP_INVALID_STATE`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/vms/{id}/config-export": {
+      "get": {
+        "operationId": "exportVMConfig",
+        "tags": [
+          "Backup"
+        ],
+        "summary": "Export the VM configuration (domain XML)",
+        "description": "Returns the libvirt domain XML of the VM, for configuration backup / disaster recovery. Cheap to call; pair it with backups for full-VM restore on a blank host.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/VMId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Domain XML (content type application/xml)",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/VMNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -1620,6 +1808,23 @@
                 "code": "VM_INVALID_STATE",
                 "message": "Virtual machine is not running",
                 "requestId": "req_01HV3M9Z2L"
+              }
+            }
+          }
+        }
+      },
+      "BackupNotFound": {
+        "description": "Backup point not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "BACKUP_NOT_FOUND",
+                "message": "Backup was not found",
+                "requestId": "req_x"
               }
             }
           }
@@ -1878,7 +2083,8 @@
             "properties": {
               "code": {
                 "type": "string",
-                "example": "VM_NOT_FOUND"
+                "example": "VM_NOT_FOUND",
+                "description": "Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active \u2014 start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists \u2014 stop the VM first), INTERNAL_ERROR.\n"
               },
               "message": {
                 "type": "string",
@@ -2641,6 +2847,117 @@
           "total": {
             "type": "integer",
             "example": 2
+          }
+        }
+      },
+      "Backup": {
+        "type": "object",
+        "required": [
+          "id",
+          "vmId",
+          "vmName",
+          "type",
+          "createdAt",
+          "sizeBytes",
+          "disks"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "bk-20250901-120000-a1b2"
+          },
+          "vmId": {
+            "type": "string",
+            "example": "erp01"
+          },
+          "vmName": {
+            "type": "string",
+            "example": "erp01"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "full"
+            ],
+            "example": "full"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "complete"
+            ],
+            "example": "complete"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-09-01T12:00:00Z"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total size of the backup's disk images on the backup storage.",
+            "example": 34359738368
+          },
+          "disks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BackupDisk"
+            }
+          },
+          "hasDomainXml": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "BackupDisk": {
+        "type": "object",
+        "required": [
+          "name",
+          "file",
+          "sizeBytes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "vda"
+          },
+          "file": {
+            "type": "string",
+            "example": "vda.qcow2"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "qcow2",
+              "raw"
+            ],
+            "example": "qcow2"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "example": 34359738368
+          }
+        }
+      },
+      "BackupList": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Backup"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "example": 3
           }
         }
       },

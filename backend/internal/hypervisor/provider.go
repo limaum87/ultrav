@@ -73,6 +73,25 @@ type Provider interface {
 	// ListHostBridges returns Linux bridges configured on the host (e.g. br0),
 	// which bridge-mode virtual networks attach to.
 	ListHostBridges(ctx context.Context) ([]types.HostBridge, error)
+
+	// BackupVirtualMachine creates a full backup of every disk plus the
+	// domain configuration. Works with the VM running (crash-consistent,
+	// block-level snapshot) or stopped. Returns ErrVMNotFound for an unknown
+	// VM, ErrInvalidVMState while a power transition is in flight.
+	BackupVirtualMachine(ctx context.Context, id string) (types.Backup, error)
+	// ListVMBackups returns the completed backup points of the VM, newest
+	// first. Returns ErrVMNotFound for an unknown VM.
+	ListVMBackups(ctx context.Context, id string) ([]types.Backup, error)
+	// DeleteBackup permanently removes a backup point (images, metadata and
+	// saved domain XML). Returns ErrBackupNotFound for an unknown point.
+	DeleteBackup(ctx context.Context, id string) error
+	// RestoreBackup overwrites the disks of the backup's VM with the point's
+	// images (and restores the saved domain configuration when present). The
+	// VM must exist and be stopped: ErrBackupInvalidState otherwise.
+	RestoreBackup(ctx context.Context, id string) (types.VirtualMachine, error)
+	// ExportVMConfig returns the libvirt domain XML of the VM (configuration
+	// backup / disaster recovery). Returns ErrVMNotFound for an unknown VM.
+	ExportVMConfig(ctx context.Context, id string) ([]byte, error)
 }
 
 var (
@@ -115,6 +134,11 @@ var (
 	// ErrKVMUnavailable is returned when the hypervisor cannot start a domain
 	// because hardware virtualization (/dev/kvm) is missing or inaccessible.
 	ErrKVMUnavailable = errors.New("hardware virtualization (KVM) is not available to the hypervisor")
+	// ErrBackupNotFound is returned when the backup point does not exist.
+	ErrBackupNotFound = errors.New("backup was not found")
+	// ErrBackupInvalidState is returned when a backup cannot be restored
+	// because its VM is running or no longer exists.
+	ErrBackupInvalidState = errors.New("this backup cannot be restored in the current state")
 )
 
 // StorageUnavailableError is the concrete form of ErrStorageUnavailable. It

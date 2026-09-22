@@ -13,21 +13,29 @@ services:
       # Modo libvirt: bind mount de caminho idêntico (Regra dos caminhos, AGENTS.md Fase 4)
       ULTRAV_ISO_DIR: /var/lib/libvirt/isos
       ULTRAV_DB_PATH: /var/lib/ultrav/data/ultrav.db
+      # Backup library (named volume — only the backend reads/writes it;
+      # qemu never opens these paths directly).
+      ULTRAV_BACKUP_DIR: /var/lib/ultrav/backups
       # Senha do admin inicial (criado só na primeira inicialização, banco vazio).
       # Se vazia, uma senha aleatória é gerada e registrada no log do backend.
       ULTRAV_ADMIN_USER: admin
-      ULTRAV_ADMIN_PASSWORD: ""
+      ULTRAV_ADMIN_PASSWORD: "admin@2026"
       # Defina um segredo fixo para que as sessões sobrevivam a restarts:
       # ULTRAV_JWT_SECRET: troque-por-um-segredo-longo
     volumes:
       - /var/run/libvirt:/var/run/libvirt
       - /var/lib/libvirt/isos:/var/lib/libvirt/isos
+      # Disk images: needed for offline backup (file copy) and restore
+      # (qemu-img convert writes the volume). Identical path inside and out
+      # (Regra dos caminhos, AGENTS.md Fase 4).
+      - /var/lib/libvirt/images:/var/lib/libvirt/images
       # Console VNC: o backend conecta direto no socket unix da VM
       # (/var/lib/libvirt/qemu/domain-*/vnc.sock). Sem este mount o dial
       # falha e o fallback (OpenGraphicsFD) quebra com "Failed to recv file
       # descriptor" — fd-passing não atravessa o bind mount do socket.
       - /var/lib/libvirt/qemu:/var/lib/libvirt/qemu:ro
       - ultrav-data:/var/lib/ultrav/data
+      - ultrav-backups:/var/lib/ultrav/backups
     # Acesso ao socket do libvirt (root:libvirt, gid 137) e ao dir de ISOs
     # (root:kvm, gid 104) no host
     group_add:
@@ -72,3 +80,4 @@ volumes:
   #   sudo chgrp kvm /var/lib/libvirt/isos && sudo chmod 2775 /var/lib/libvirt/isos
   ultrav-isos:
   ultrav-data:
+  ultrav-backups:

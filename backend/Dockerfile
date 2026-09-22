@@ -30,7 +30,7 @@ EXPOSE 8080
 # ISO library directory: pre-owned by the runtime user so named volumes
 # inherit the right ownership on first mount.
 # Data directory: same treatment — the SQLite user DB lives there.
-RUN mkdir -p /var/lib/ultrav/isos /var/lib/ultrav/data \
+RUN mkdir -p /var/lib/ultrav/isos /var/lib/ultrav/data /var/lib/ultrav/backups \
       && chown -R nobody:nogroup /var/lib/ultrav
 USER nobody
 ENTRYPOINT ["ultrav"]

@@ -13,6 +13,22 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for BackupState.
+const (
+	Complete BackupState = "complete"
+)
+
+// Defines values for BackupType.
+const (
+	Full BackupType = "full"
+)
+
+// Defines values for BackupDiskFormat.
+const (
+	BackupDiskFormatQcow2 BackupDiskFormat = "qcow2"
+	BackupDiskFormatRaw   BackupDiskFormat = "raw"
+)
+
 // Defines values for CreateUserRequestRole.
 const (
 	CreateUserRequestRoleAdmin  CreateUserRequestRole = "admin"
@@ -34,8 +50,8 @@ const (
 
 // Defines values for DiskCreateFormat.
 const (
-	DiskCreateFormatQcow2 DiskCreateFormat = "qcow2"
-	DiskCreateFormatRaw   DiskCreateFormat = "raw"
+	Qcow2 DiskCreateFormat = "qcow2"
+	Raw   DiskCreateFormat = "raw"
 )
 
 // Defines values for HealthStatus.
@@ -175,6 +191,44 @@ const (
 	VirtualMachineCreateOsTypeWindows VirtualMachineCreateOsType = "windows"
 )
 
+// Backup defines model for Backup.
+type Backup struct {
+	CreatedAt    time.Time    `json:"createdAt"`
+	Disks        []BackupDisk `json:"disks"`
+	HasDomainXml *bool        `json:"hasDomainXml,omitempty"`
+	Id           string       `json:"id"`
+
+	// SizeBytes Total size of the backup's disk images on the backup storage.
+	SizeBytes int64        `json:"sizeBytes"`
+	State     *BackupState `json:"state,omitempty"`
+	Type      BackupType   `json:"type"`
+	VmId      string       `json:"vmId"`
+	VmName    string       `json:"vmName"`
+}
+
+// BackupState defines model for Backup.State.
+type BackupState string
+
+// BackupType defines model for Backup.Type.
+type BackupType string
+
+// BackupDisk defines model for BackupDisk.
+type BackupDisk struct {
+	File      string            `json:"file"`
+	Format    *BackupDiskFormat `json:"format,omitempty"`
+	Name      string            `json:"name"`
+	SizeBytes int64             `json:"sizeBytes"`
+}
+
+// BackupDiskFormat defines model for BackupDisk.Format.
+type BackupDiskFormat string
+
+// BackupList defines model for BackupList.
+type BackupList struct {
+	Items []Backup `json:"items"`
+	Total int      `json:"total"`
+}
+
 // Capabilities defines model for Capabilities.
 type Capabilities struct {
 	Features       CapabilitiesFeatures       `json:"features"`
@@ -256,6 +310,7 @@ type DiskCreateFormat string
 // Error defines model for Error.
 type Error struct {
 	Error struct {
+		// Code Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), INTERNAL_ERROR.
 		Code      string `json:"code"`
 		Message   string `json:"message"`
 		RequestId string `json:"requestId"`
@@ -668,6 +723,9 @@ type UserId = int
 
 // VMId defines model for VMId.
 type VMId = string
+
+// BackupNotFound defines model for BackupNotFound.
+type BackupNotFound = Error
 
 // Forbidden defines model for Forbidden.
 type Forbidden = Error

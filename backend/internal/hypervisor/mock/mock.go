@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
+	"github.com/ultrav/ultrav/backend/internal/backup"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
 )
 
@@ -89,16 +90,18 @@ func (vm *vmState) networkOrDefault() string {
 
 // Provider is an in-memory simulated KVM host.
 type Provider struct {
-	mu    sync.Mutex
-	vms   map[string]*vmState
-	rng   *rand.Rand
-	start time.Time
+	mu      sync.Mutex
+	vms     map[string]*vmState
+	rng     *rand.Rand
+	start   time.Time
+	backups *backup.Store // nil only in tests that do not exercise backups
 }
 
 // New creates the mock provider with the simulated fleet. VMs erp01, web01
 // and database01 start running (with staggered boot times); monitoring01
-// starts stopped.
-func New() *Provider {
+// starts stopped. backupDir is the on-disk backup library (created if
+// missing); an empty string disables backup persistence (tests).
+func New(backupDir string) *Provider {
 	now := time.Now()
 	p := &Provider{
 		vms:   make(map[string]*vmState, len(specs)),
@@ -119,6 +122,13 @@ func New() *Provider {
 			st.ipAddress = s.ip
 		}
 		p.vms[s.id] = st
+	}
+	if backupDir != "" {
+		st, err := backup.New(backupDir)
+		if err != nil {
+			panic(fmt.Sprintf("mock provider: %v", err))
+		}
+		p.backups = st
 	}
 	return p
 }

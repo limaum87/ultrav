@@ -81,6 +81,13 @@ func (s *Server) routes() {
 	// WebSocket (noVNC) — proxied to the VM's graphical console.
 	mux.HandleFunc("GET /api/v1/vms/{id}/console", s.requireValidVMID(s.handleVMConsole))
 
+	// Backup
+	mux.HandleFunc("GET /api/v1/vms/{id}/backups", s.requireValidVMID(s.handleListVMBackups))
+	mux.HandleFunc("POST /api/v1/vms/{id}/backups", s.requireValidVMID(s.handleCreateVMBackup))
+	mux.HandleFunc("DELETE /api/v1/backups/{id}", s.requireValidBackupID(s.handleDeleteBackup))
+	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireValidBackupID(s.handleRestoreBackup))
+	mux.HandleFunc("GET /api/v1/vms/{id}/config-export", s.requireValidVMID(s.handleExportVMConfig))
+
 	// Storage pools
 	mux.HandleFunc("GET /api/v1/storage/pools", s.handleListStoragePools)
 	mux.HandleFunc("POST /api/v1/storage/pools", s.handleCreateStoragePool)

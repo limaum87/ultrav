@@ -112,9 +112,9 @@ func main() {
 func newProvider(p config.Provider, cfg config.Config, isos *iso.Store) (hypervisor.Provider, error) {
 	switch p {
 	case config.ProviderMock:
-		return mock.New(), nil
+		return mock.New(cfg.BackupDir), nil
 	case config.ProviderLibvirt:
-		return libvirt.New(cfg.LibvirtURI, isos.Dir), nil
+		return libvirt.New(cfg.LibvirtURI, isos.Dir, cfg.BackupDir), nil
 	}
 	return nil, errors.New("unknown provider")
 }

@@ -13,7 +13,7 @@ import (
 )
 
 func testServer(t *testing.T) *Server {
-	return NewServer(mock.New(), testIsoStore(t), nil, nil, testLogger()) // auth disabled
+	return NewServer(mock.New(""), testIsoStore(t), nil, nil, testLogger()) // auth disabled
 }
 
 func get(t *testing.T, s *Server, path string) (*http.Response, map[string]any) {
