@@ -20,6 +20,7 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/libvirt"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/mock"
 	"github.com/ultrav/ultrav/backend/internal/iso"
+	"github.com/ultrav/ultrav/backend/internal/scheduler"
 	"github.com/ultrav/ultrav/backend/internal/settings"
 )
 
@@ -77,7 +78,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := api.NewServer(provider, isos, authn, st, log)
+	// Backup schedules: JSON-persisted definitions + run loop over the
+	// provider (daily time, targets, retention). Failures are fatal: silent
+	// loss of schedules would defeat the feature.
+	schedPath := cfg.SchedulesPath
+	if schedPath == "" {
+		schedPath = filepath.Join(filepath.Dir(cfg.DBPath), "schedules.json")
+	}
+	schedStore, err := scheduler.Open(schedPath)
+	if err != nil {
+		log.Error("failed to open backup schedule store", "path", schedPath, "err", err)
+		os.Exit(1)
+	}
+	sched := scheduler.New(schedStore, provider, log)
+	schedCtx, schedCancel := context.WithCancel(context.Background())
+	defer schedCancel()
+	go sched.RunLoop(schedCtx)
+
+	srv := api.NewServer(provider, isos, authn, st, sched, log)
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Handler(),

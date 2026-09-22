@@ -20,6 +20,7 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/auth"
 	"github.com/ultrav/ultrav/backend/internal/hypervisor"
 	"github.com/ultrav/ultrav/backend/internal/iso"
+	"github.com/ultrav/ultrav/backend/internal/scheduler"
 	"github.com/ultrav/ultrav/backend/internal/settings"
 )
 
@@ -31,7 +32,8 @@ type Server struct {
 	provider hypervisor.Provider
 	isos     *iso.Store
 	authn    *auth.Service // nil disables authentication (tests)
-	settings *settings.Store // nil disables persistence of runtime settings
+	settings *settings.Store    // nil disables persistence of runtime settings
+	sched    *scheduler.Service // nil disables backup schedule endpoints
 	log      *slog.Logger
 	router   *http.ServeMux
 }
@@ -39,8 +41,8 @@ type Server struct {
 // NewServer builds the API server. Pass a non-nil auth service to require
 // bearer tokens on protected endpoints and a non-nil settings store to
 // persist runtime settings (e.g. the ISO library directory override).
-func NewServer(provider hypervisor.Provider, isos *iso.Store, authn *auth.Service, st *settings.Store, log *slog.Logger) *Server {
-	s := &Server{provider: provider, isos: isos, authn: authn, settings: st, log: log, router: http.NewServeMux()}
+func NewServer(provider hypervisor.Provider, isos *iso.Store, authn *auth.Service, st *settings.Store, sched *scheduler.Service, log *slog.Logger) *Server {
+	s := &Server{provider: provider, isos: isos, authn: authn, settings: st, sched: sched, log: log, router: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -87,6 +89,12 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/backups/{id}", s.requireValidBackupID(s.handleDeleteBackup))
 	mux.HandleFunc("POST /api/v1/backups/{id}/restore", s.requireValidBackupID(s.handleRestoreBackup))
 	mux.HandleFunc("GET /api/v1/vms/{id}/config-export", s.requireValidVMID(s.handleExportVMConfig))
+
+	// Backup schedules
+	mux.HandleFunc("GET /api/v1/backup-schedules", s.handleListBackupSchedules)
+	mux.HandleFunc("POST /api/v1/backup-schedules", s.handleCreateBackupSchedule)
+	mux.HandleFunc("PUT /api/v1/backup-schedules/{id}", s.requireValidScheduleID(s.handleUpdateBackupSchedule))
+	mux.HandleFunc("DELETE /api/v1/backup-schedules/{id}", s.requireValidScheduleID(s.handleDeleteBackupSchedule))
 
 	// Storage pools
 	mux.HandleFunc("GET /api/v1/storage/pools", s.handleListStoragePools)

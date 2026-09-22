@@ -629,6 +629,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backup-schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List backup schedules */
+        get: operations["listBackupSchedules"];
+        put?: never;
+        /**
+         * Create a backup schedule
+         * @description Defines a recurring backup job: every day at `time` (server local
+         *     time) the scheduler backs up the target VMs and then applies the
+         *     retention policy (keeps the newest `retentionKeepLast` full chains;
+         *     points older than that are deleted together with their checkpoints).
+         *
+         *     The type follows the backup semantics: `auto` picks incremental when
+         *     a chain is valid, full otherwise; a stopped VM always takes a full.
+         *     Use `vmIds: ["*"]` to target every VM present at run time.
+         */
+        post: operations["createBackupSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backup-schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update a backup schedule
+         * @description Partial update — only the fields present in the body change. `name` and `id` are immutable.
+         */
+        put: operations["updateBackupSchedule"];
+        post?: never;
+        /**
+         * Delete a backup schedule
+         * @description Removes the schedule definition. Existing backup points are not touched.
+         */
+        delete: operations["deleteBackupSchedule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/vms/{id}/backups": {
         parameters: {
             query?: never;
@@ -826,7 +878,7 @@ export interface components {
         Error: {
             error: {
                 /**
-                 * @description Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), INTERNAL_ERROR.
+                 * @description Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), SCHEDULE_NOT_FOUND, INTERNAL_ERROR.
                  * @example VM_NOT_FOUND
                  */
                 code: string;
@@ -1265,6 +1317,84 @@ export interface components {
              */
             type?: "full" | "incremental";
         };
+        BackupSchedule: {
+            /** @example sch-8f3a2b1c */
+            id: string;
+            /** @example nightly */
+            name: string;
+            /**
+             * @description Daily run time, server local time (HH:MM).
+             * @example 03:00
+             */
+            time: string;
+            /**
+             * @description Target VM names, or `["*"]` for every VM at run time.
+             * @example [
+             *       "*"
+             *     ]
+             */
+            vmIds: string[];
+            /**
+             * @description Point type policy applied on each run.
+             * @example auto
+             * @enum {string}
+             */
+            type: "auto" | "full" | "incremental";
+            /**
+             * @description Number of full chains to keep (each chain = a full backup plus
+             *     the incrementals on top of it). 0 disables pruning.
+             * @example 7
+             */
+            retentionKeepLast: number;
+            /** @example true */
+            enabled: boolean;
+            /**
+             * Format: date-time
+             * @description When the schedule last fired (null = never).
+             * @example 2025-09-01T03:00:00Z
+             */
+            lastRun?: string | null;
+        };
+        BackupScheduleList: {
+            items: components["schemas"]["BackupSchedule"][];
+            /** @example 1 */
+            total: number;
+        };
+        BackupScheduleCreate: {
+            /** @example nightly */
+            name: string;
+            /**
+             * @description Daily run time, server local time (HH:MM).
+             * @example 03:00
+             */
+            time: string;
+            /**
+             * @description Target VM names, or `["*"]` for every VM.
+             * @example [
+             *       "*"
+             *     ]
+             */
+            vmIds: string[];
+            /**
+             * @default auto
+             * @enum {string}
+             */
+            type: "auto" | "full" | "incremental";
+            /** @default 0 */
+            retentionKeepLast: number;
+            /** @default true */
+            enabled: boolean;
+        };
+        /** @description Partial update; only present fields change (name/id immutable). */
+        BackupScheduleUpdate: {
+            /** @example 04:30 */
+            time?: string;
+            vmIds?: string[];
+            /** @enum {string} */
+            type?: "auto" | "full" | "incremental";
+            retentionKeepLast?: number;
+            enabled?: boolean;
+        };
         BackupDisk: {
             /** @example vda */
             name: string;
@@ -1516,6 +1646,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Backup schedule not found */
+        ScheduleNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "SCHEDULE_NOT_FOUND",
+                 *         "message": "Backup schedule was not found",
+                 *         "requestId": "req_x"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Internal server error (no internal details are exposed) */
         InternalError: {
             headers: {
@@ -1590,6 +1738,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Backup schedule identifier (`sch-...`). */
+        ScheduleId: string;
         /** @description Virtual machine identifier (name). */
         VMId: string;
         /** @description Resource identifier (libvirt name). */
@@ -2862,6 +3012,132 @@ export interface operations {
             };
             404: components["responses"]["VMNotFound"];
             409: components["responses"]["VMInvalidState"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listBackupSchedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Schedules (creation order) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupScheduleList"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "nightly",
+                 *       "time": "03:00",
+                 *       "vmIds": [
+                 *         "*"
+                 *       ],
+                 *       "type": "auto",
+                 *       "retentionKeepLast": 7,
+                 *       "enabled": true
+                 *     }
+                 */
+                "application/json": components["schemas"]["BackupScheduleCreate"];
+            };
+        };
+        responses: {
+            /** @description Schedule created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSchedule"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            /** @description A schedule with this name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backup schedule identifier (`sch-...`). */
+                id: components["parameters"]["ScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["BackupScheduleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated schedule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSchedule"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            404: components["responses"]["ScheduleNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteBackupSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backup schedule identifier (`sch-...`). */
+                id: components["parameters"]["ScheduleId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Schedule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["ScheduleNotFound"];
             500: components["responses"]["InternalError"];
         };
     };

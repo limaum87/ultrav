@@ -29,6 +29,8 @@ type Config struct {
 	IsoDir string
 	// BackupDir is the directory backing the VM backup library.
 	BackupDir string
+	// SchedulesPath is the JSON file persisting backup schedules.
+	SchedulesPath string
 	// DBPath is the SQLite database file for users.
 	DBPath string
 	// JWTSecret signs bearer tokens; empty = ephemeral per-process secret.
@@ -46,7 +48,8 @@ func Load() (Config, error) {
 		CORSOrigin:    os.Getenv("ULTRAV_CORS_ORIGIN"),
 		LibvirtURI:    envOr("HYPERVISOR_LIBVIRT_URI", "qemu:///system"),
 		IsoDir:        envOr("ULTRAV_ISO_DIR", "/var/lib/libvirt/images/isos"),
-		BackupDir:     envOr("ULTRAV_BACKUP_DIR", "/var/lib/ultrav/backups"),
+		BackupDir:      envOr("ULTRAV_BACKUP_DIR", "/var/lib/ultrav/backups"),
+		SchedulesPath:  envOr("ULTRAV_SCHEDULES_PATH", ""),
 		DBPath:        envOr("ULTRAV_DB_PATH", "/var/lib/ultrav/ultrav.db"),
 		JWTSecret:     os.Getenv("ULTRAV_JWT_SECRET"),
 		AdminUser:     os.Getenv("ULTRAV_ADMIN_USER"),

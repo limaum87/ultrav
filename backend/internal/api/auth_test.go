@@ -22,7 +22,7 @@ func authTestServer(t *testing.T) (*Server, string) {
 	if _, err := svc.CreateUser("admin", "s3cret", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	return NewServer(mock.New(""), testIsoStore(t), svc, nil, testLogger()), "admin"
+	return NewServer(mock.New(""), testIsoStore(t), svc, nil, nil, testLogger()), "admin"
 }
 
 func TestAuthLoginFlow(t *testing.T) {

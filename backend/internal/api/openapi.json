@@ -1552,6 +1552,159 @@
         }
       }
     },
+    "/backup-schedules": {
+      "get": {
+        "operationId": "listBackupSchedules",
+        "tags": [
+          "Backup Schedules"
+        ],
+        "summary": "List backup schedules",
+        "responses": {
+          "200": {
+            "description": "Schedules (creation order)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupScheduleList"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBackupSchedule",
+        "tags": [
+          "Backup Schedules"
+        ],
+        "summary": "Create a backup schedule",
+        "description": "Defines a recurring backup job: every day at `time` (server local\ntime) the scheduler backs up the target VMs and then applies the\nretention policy (keeps the newest `retentionKeepLast` full chains;\npoints older than that are deleted together with their checkpoints).\n\nThe type follows the backup semantics: `auto` picks incremental when\na chain is valid, full otherwise; a stopped VM always takes a full.\nUse `vmIds: [\"*\"]` to target every VM present at run time.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupScheduleCreate"
+              },
+              "example": {
+                "name": "nightly",
+                "time": "03:00",
+                "vmIds": [
+                  "*"
+                ],
+                "type": "auto",
+                "retentionKeepLast": 7,
+                "enabled": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Schedule created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSchedule"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "description": "A schedule with this name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/backup-schedules/{id}": {
+      "put": {
+        "operationId": "updateBackupSchedule",
+        "tags": [
+          "Backup Schedules"
+        ],
+        "summary": "Update a backup schedule",
+        "description": "Partial update \u2014 only the fields present in the body change. `name` and `id` are immutable.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ScheduleId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupScheduleUpdate"
+              },
+              "example": {
+                "enabled": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated schedule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSchedule"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScheduleNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteBackupSchedule",
+        "tags": [
+          "Backup Schedules"
+        ],
+        "summary": "Delete a backup schedule",
+        "description": "Removes the schedule definition. Existing backup points are not touched.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ScheduleId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Schedule deleted"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScheduleNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/vms/{id}/backups": {
       "get": {
         "operationId": "listVMBackups",
@@ -1757,6 +1910,17 @@
   ],
   "components": {
     "parameters": {
+      "ScheduleId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Backup schedule identifier (`sch-...`).",
+        "schema": {
+          "type": "string",
+          "pattern": "^sch-[a-zA-Z0-9._-]{1,60}$",
+          "example": "sch-nightly"
+        }
+      },
       "VMId": {
         "name": "id",
         "in": "path",
@@ -1837,6 +2001,23 @@
               "error": {
                 "code": "BACKUP_NOT_FOUND",
                 "message": "Backup was not found",
+                "requestId": "req_x"
+              }
+            }
+          }
+        }
+      },
+      "ScheduleNotFound": {
+        "description": "Backup schedule not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "SCHEDULE_NOT_FOUND",
+                "message": "Backup schedule was not found",
                 "requestId": "req_x"
               }
             }
@@ -2097,7 +2278,7 @@
               "code": {
                 "type": "string",
                 "example": "VM_NOT_FOUND",
-                "description": "Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active \u2014 start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists \u2014 stop the VM first), INTERNAL_ERROR.\n"
+                "description": "Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active \u2014 start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists \u2014 stop the VM first), SCHEDULE_NOT_FOUND, INTERNAL_ERROR.\n"
               },
               "message": {
                 "type": "string",
@@ -2943,6 +3124,171 @@
             ],
             "description": "Force the point type. `incremental` fails with 409\n`BACKUP_INVALID_STATE` when no valid chain exists (e.g. after a\nrestore or if the parent checkpoint was deleted). Absent = auto\n(incremental when a chain is valid, full otherwise).\n",
             "example": "incremental"
+          }
+        }
+      },
+      "BackupSchedule": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "time",
+          "vmIds",
+          "type",
+          "retentionKeepLast",
+          "enabled"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "sch-8f3a2b1c"
+          },
+          "name": {
+            "type": "string",
+            "example": "nightly"
+          },
+          "time": {
+            "type": "string",
+            "description": "Daily run time, server local time (HH:MM).",
+            "example": "03:00"
+          },
+          "vmIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Target VM names, or `[\"*\"]` for every VM at run time.",
+            "example": [
+              "*"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "full",
+              "incremental"
+            ],
+            "description": "Point type policy applied on each run.",
+            "example": "auto"
+          },
+          "retentionKeepLast": {
+            "type": "integer",
+            "description": "Number of full chains to keep (each chain = a full backup plus\nthe incrementals on top of it). 0 disables pruning.\n",
+            "example": 7
+          },
+          "enabled": {
+            "type": "boolean",
+            "example": true
+          },
+          "lastRun": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "When the schedule last fired (null = never).",
+            "example": "2025-09-01T03:00:00Z"
+          }
+        }
+      },
+      "BackupScheduleList": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BackupSchedule"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "example": 1
+          }
+        }
+      },
+      "BackupScheduleCreate": {
+        "type": "object",
+        "required": [
+          "name",
+          "time",
+          "vmIds"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "example": "nightly"
+          },
+          "time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "description": "Daily run time, server local time (HH:MM).",
+            "example": "03:00"
+          },
+          "vmIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Target VM names, or `[\"*\"]` for every VM.",
+            "example": [
+              "*"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "full",
+              "incremental"
+            ],
+            "default": "auto"
+          },
+          "retentionKeepLast": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "BackupScheduleUpdate": {
+        "type": "object",
+        "description": "Partial update; only present fields change (name/id immutable).",
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+            "example": "04:30"
+          },
+          "vmIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "full",
+              "incremental"
+            ]
+          },
+          "retentionKeepLast": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "enabled": {
+            "type": "boolean"
           }
         }
       },

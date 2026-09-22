@@ -13,7 +13,7 @@ import (
 // testBackupServer builds a server whose mock provider persists backups in a
 // temporary directory.
 func testBackupServer(t *testing.T) *Server {
-	return NewServer(mock.New(t.TempDir()), testIsoStore(t), nil, nil, testLogger())
+	return NewServer(mock.New(t.TempDir()), testIsoStore(t), nil, nil, nil, testLogger())
 }
 
 // do issues an arbitrary request and decodes the JSON body (if any).

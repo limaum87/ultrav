@@ -36,6 +36,27 @@ const (
 	BackupDiskFormatRaw   BackupDiskFormat = "raw"
 )
 
+// Defines values for BackupScheduleType.
+const (
+	BackupScheduleTypeAuto        BackupScheduleType = "auto"
+	BackupScheduleTypeFull        BackupScheduleType = "full"
+	BackupScheduleTypeIncremental BackupScheduleType = "incremental"
+)
+
+// Defines values for BackupScheduleCreateType.
+const (
+	BackupScheduleCreateTypeAuto        BackupScheduleCreateType = "auto"
+	BackupScheduleCreateTypeFull        BackupScheduleCreateType = "full"
+	BackupScheduleCreateTypeIncremental BackupScheduleCreateType = "incremental"
+)
+
+// Defines values for BackupScheduleUpdateType.
+const (
+	Auto        BackupScheduleUpdateType = "auto"
+	Full        BackupScheduleUpdateType = "full"
+	Incremental BackupScheduleUpdateType = "incremental"
+)
+
 // Defines values for CreateUserRequestRole.
 const (
 	CreateUserRequestRoleAdmin  CreateUserRequestRole = "admin"
@@ -262,6 +283,67 @@ type BackupList struct {
 	Total int      `json:"total"`
 }
 
+// BackupSchedule defines model for BackupSchedule.
+type BackupSchedule struct {
+	Enabled bool   `json:"enabled"`
+	Id      string `json:"id"`
+
+	// LastRun When the schedule last fired (null = never).
+	LastRun *time.Time `json:"lastRun"`
+	Name    string     `json:"name"`
+
+	// RetentionKeepLast Number of full chains to keep (each chain = a full backup plus
+	// the incrementals on top of it). 0 disables pruning.
+	RetentionKeepLast int `json:"retentionKeepLast"`
+
+	// Time Daily run time, server local time (HH:MM).
+	Time string `json:"time"`
+
+	// Type Point type policy applied on each run.
+	Type BackupScheduleType `json:"type"`
+
+	// VmIds Target VM names, or `["*"]` for every VM at run time.
+	VmIds []string `json:"vmIds"`
+}
+
+// BackupScheduleType Point type policy applied on each run.
+type BackupScheduleType string
+
+// BackupScheduleCreate defines model for BackupScheduleCreate.
+type BackupScheduleCreate struct {
+	Enabled           *bool  `json:"enabled,omitempty"`
+	Name              string `json:"name"`
+	RetentionKeepLast *int   `json:"retentionKeepLast,omitempty"`
+
+	// Time Daily run time, server local time (HH:MM).
+	Time string                    `json:"time"`
+	Type *BackupScheduleCreateType `json:"type,omitempty"`
+
+	// VmIds Target VM names, or `["*"]` for every VM.
+	VmIds []string `json:"vmIds"`
+}
+
+// BackupScheduleCreateType defines model for BackupScheduleCreate.Type.
+type BackupScheduleCreateType string
+
+// BackupScheduleList defines model for BackupScheduleList.
+type BackupScheduleList struct {
+	Items []BackupSchedule `json:"items"`
+	Total int              `json:"total"`
+}
+
+// BackupScheduleUpdate Partial update; only present fields change (name/id immutable).
+type BackupScheduleUpdate struct {
+	Enabled           *bool                     `json:"enabled,omitempty"`
+	RetentionKeepLast *int                      `json:"retentionKeepLast,omitempty"`
+	Time              *string                   `json:"time,omitempty"`
+	Type              *BackupScheduleUpdateType `json:"type,omitempty"`
+	VmIds             *[]string                 `json:"vmIds,omitempty"`
+}
+
+// BackupScheduleUpdateType defines model for BackupScheduleUpdate.Type.
+type BackupScheduleUpdateType string
+
 // Capabilities defines model for Capabilities.
 type Capabilities struct {
 	Features       CapabilitiesFeatures       `json:"features"`
@@ -343,7 +425,7 @@ type DiskCreateFormat string
 // Error defines model for Error.
 type Error struct {
 	Error struct {
-		// Code Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), INTERNAL_ERROR.
+		// Code Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), SCHEDULE_NOT_FOUND, INTERNAL_ERROR.
 		Code      string `json:"code"`
 		Message   string `json:"message"`
 		RequestId string `json:"requestId"`
@@ -751,6 +833,9 @@ type VmMetrics struct {
 // ResourceID defines model for ResourceID.
 type ResourceID = string
 
+// ScheduleId defines model for ScheduleId.
+type ScheduleId = string
+
 // UserId defines model for UserId.
 type UserId = int
 
@@ -765,6 +850,9 @@ type Forbidden = Error
 
 // InternalError defines model for InternalError.
 type InternalError = Error
+
+// ScheduleNotFound defines model for ScheduleNotFound.
+type ScheduleNotFound = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
@@ -794,6 +882,12 @@ type LoginJSONRequestBody = LoginRequest
 
 // ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
 type ChangeOwnPasswordJSONRequestBody = ChangePasswordRequest
+
+// CreateBackupScheduleJSONRequestBody defines body for CreateBackupSchedule for application/json ContentType.
+type CreateBackupScheduleJSONRequestBody = BackupScheduleCreate
+
+// UpdateBackupScheduleJSONRequestBody defines body for UpdateBackupSchedule for application/json ContentType.
+type UpdateBackupScheduleJSONRequestBody = BackupScheduleUpdate
 
 // CreateNetworkJSONRequestBody defines body for CreateNetwork for application/json ContentType.
 type CreateNetworkJSONRequestBody = NetworkCreate

@@ -11,62 +11,66 @@ import (
 
 // Error codes are stable, public identifiers (see docs/api/openapi.yaml).
 const (
-	CodeVMNotFound           = "VM_NOT_FOUND"
-	CodeVMInvalidState       = "VM_INVALID_STATE"
-	CodeVMAlreadyExists      = "VM_ALREADY_EXISTS"
-	CodeValidationError      = "VALIDATION_ERROR"
-	CodeNotFound             = "NOT_FOUND"
-	CodeMethodNotAllowed     = "METHOD_NOT_ALLOWED"
-	CodePoolNotFound         = "STORAGE_POOL_NOT_FOUND"
-	CodePoolAlreadyExists    = "STORAGE_POOL_ALREADY_EXISTS"
-	CodeNetworkNotFound      = "NETWORK_NOT_FOUND"
-	CodeNetworkInvalidState  = "NETWORK_INVALID_STATE"
-	CodeNetworkAlreadyExists = "NETWORK_ALREADY_EXISTS"
-	CodeIsoNotFound          = "ISO_NOT_FOUND"
-	CodeIsoAlreadyExists     = "ISO_ALREADY_EXISTS"
-	CodeUnauthorized         = "UNAUTHORIZED"
-	CodeInvalidCredentials   = "INVALID_CREDENTIALS"
-	CodeForbidden            = "FORBIDDEN"
-	CodeUserNotFound         = "USER_NOT_FOUND"
-	CodeUserAlreadyExists    = "USER_ALREADY_EXISTS"
-	CodeLastAdmin            = "LAST_ADMIN"
-	CodeInternalError        = "INTERNAL_ERROR"
-	CodeConsoleUnavailable   = "CONSOLE_UNAVAILABLE"
-	CodeStorageUnavailable   = "STORAGE_UNAVAILABLE"
-	CodeKVMUnavailable       = "KVM_UNAVAILABLE"
-	CodeNetworkInactive      = "NETWORK_INACTIVE"
-	CodeBackupNotFound       = "BACKUP_NOT_FOUND"
-	CodeBackupInvalidState   = "BACKUP_INVALID_STATE"
+	CodeVMNotFound            = "VM_NOT_FOUND"
+	CodeVMInvalidState        = "VM_INVALID_STATE"
+	CodeVMAlreadyExists       = "VM_ALREADY_EXISTS"
+	CodeValidationError       = "VALIDATION_ERROR"
+	CodeNotFound              = "NOT_FOUND"
+	CodeMethodNotAllowed      = "METHOD_NOT_ALLOWED"
+	CodePoolNotFound          = "STORAGE_POOL_NOT_FOUND"
+	CodePoolAlreadyExists     = "STORAGE_POOL_ALREADY_EXISTS"
+	CodeNetworkNotFound       = "NETWORK_NOT_FOUND"
+	CodeNetworkInvalidState   = "NETWORK_INVALID_STATE"
+	CodeNetworkAlreadyExists  = "NETWORK_ALREADY_EXISTS"
+	CodeIsoNotFound           = "ISO_NOT_FOUND"
+	CodeIsoAlreadyExists      = "ISO_ALREADY_EXISTS"
+	CodeUnauthorized          = "UNAUTHORIZED"
+	CodeInvalidCredentials    = "INVALID_CREDENTIALS"
+	CodeForbidden             = "FORBIDDEN"
+	CodeUserNotFound          = "USER_NOT_FOUND"
+	CodeUserAlreadyExists     = "USER_ALREADY_EXISTS"
+	CodeLastAdmin             = "LAST_ADMIN"
+	CodeInternalError         = "INTERNAL_ERROR"
+	CodeConsoleUnavailable    = "CONSOLE_UNAVAILABLE"
+	CodeStorageUnavailable    = "STORAGE_UNAVAILABLE"
+	CodeKVMUnavailable        = "KVM_UNAVAILABLE"
+	CodeNetworkInactive       = "NETWORK_INACTIVE"
+	CodeBackupNotFound        = "BACKUP_NOT_FOUND"
+	CodeBackupInvalidState    = "BACKUP_INVALID_STATE"
+	CodeScheduleNotFound      = "SCHEDULE_NOT_FOUND"
+	CodeScheduleAlreadyExists = "SCHEDULE_ALREADY_EXISTS"
 )
 
 // errorStatus maps error codes to HTTP status codes.
 var errorStatus = map[string]int{
-	CodeVMNotFound:           http.StatusNotFound,
-	CodeVMInvalidState:       http.StatusConflict,
-	CodeVMAlreadyExists:      http.StatusConflict,
-	CodeValidationError:      http.StatusBadRequest,
-	CodeNotFound:             http.StatusNotFound,
-	CodeMethodNotAllowed:     http.StatusMethodNotAllowed,
-	CodePoolNotFound:         http.StatusNotFound,
-	CodePoolAlreadyExists:    http.StatusConflict,
-	CodeNetworkNotFound:      http.StatusNotFound,
-	CodeNetworkInvalidState:  http.StatusConflict,
-	CodeNetworkAlreadyExists: http.StatusConflict,
-	CodeIsoNotFound:          http.StatusNotFound,
-	CodeIsoAlreadyExists:     http.StatusConflict,
-	CodeUnauthorized:         http.StatusUnauthorized,
-	CodeInvalidCredentials:   http.StatusUnauthorized,
-	CodeForbidden:            http.StatusForbidden,
-	CodeUserNotFound:         http.StatusNotFound,
-	CodeUserAlreadyExists:    http.StatusConflict,
-	CodeLastAdmin:            http.StatusConflict,
-	CodeInternalError:        http.StatusInternalServerError,
-	CodeConsoleUnavailable:   http.StatusConflict,
-	CodeStorageUnavailable:   http.StatusConflict,
-	CodeKVMUnavailable:       http.StatusConflict,
-	CodeNetworkInactive:      http.StatusConflict,
-	CodeBackupNotFound:       http.StatusNotFound,
-	CodeBackupInvalidState:   http.StatusConflict,
+	CodeVMNotFound:            http.StatusNotFound,
+	CodeVMInvalidState:        http.StatusConflict,
+	CodeVMAlreadyExists:       http.StatusConflict,
+	CodeValidationError:       http.StatusBadRequest,
+	CodeNotFound:              http.StatusNotFound,
+	CodeMethodNotAllowed:      http.StatusMethodNotAllowed,
+	CodePoolNotFound:          http.StatusNotFound,
+	CodePoolAlreadyExists:     http.StatusConflict,
+	CodeNetworkNotFound:       http.StatusNotFound,
+	CodeNetworkInvalidState:   http.StatusConflict,
+	CodeNetworkAlreadyExists:  http.StatusConflict,
+	CodeIsoNotFound:           http.StatusNotFound,
+	CodeIsoAlreadyExists:      http.StatusConflict,
+	CodeUnauthorized:          http.StatusUnauthorized,
+	CodeInvalidCredentials:    http.StatusUnauthorized,
+	CodeForbidden:             http.StatusForbidden,
+	CodeUserNotFound:          http.StatusNotFound,
+	CodeUserAlreadyExists:     http.StatusConflict,
+	CodeLastAdmin:             http.StatusConflict,
+	CodeInternalError:         http.StatusInternalServerError,
+	CodeConsoleUnavailable:    http.StatusConflict,
+	CodeStorageUnavailable:    http.StatusConflict,
+	CodeKVMUnavailable:        http.StatusConflict,
+	CodeNetworkInactive:       http.StatusConflict,
+	CodeBackupNotFound:        http.StatusNotFound,
+	CodeBackupInvalidState:    http.StatusConflict,
+	CodeScheduleNotFound:      http.StatusNotFound,
+	CodeScheduleAlreadyExists: http.StatusConflict,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,
