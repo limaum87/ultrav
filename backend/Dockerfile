@@ -22,7 +22,7 @@ RUN go test -tags libvirt_dlopen ./...
 # real daemon; the mock provider runs without it).
 FROM debian:12-slim
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
-      libvirt0 ca-certificates wget \
+      libvirt0 qemu-utils ca-certificates wget \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/ultrav /usr/local/bin/ultrav
 ENV ULTRAV_PORT=8080
