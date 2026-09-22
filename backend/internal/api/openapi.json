@@ -1588,13 +1588,26 @@
         "tags": [
           "Backup"
         ],
-        "summary": "Create a full backup of a virtual machine",
-        "description": "Backs up every disk of the VM plus its domain configuration.\n\nWorks with the VM running or stopped. When running, the backup is\ncrash-consistent (block-level snapshot taken by the hypervisor via\n`virDomainBackupBegin`); for application-consistent backups of\ndatabases, shut the VM down or quiesce it first (guest-agent fsfreeze\nintegration arrives in a later phase).\n\nThe call is synchronous: it returns when the copy completes. Disk\nimages are stored as qcow2 in the server's backup directory\n(`ULTRAV_BACKUP_DIR`, default `/var/lib/ultrav/backups`), one folder\nper backup point, alongside a `metadata.json` and the saved\n`domain.xml`.\n",
+        "summary": "Create a backup of a virtual machine (full or incremental)",
+        "description": "Backs up every disk of the VM plus its domain configuration.\n\nBy default the engine picks the point type automatically:\n**incremental** when a valid backup chain exists (previous point's\ncheckpoint present in the domain \u2014 only dirty blocks since the last\nbackup are copied, via libvirt checkpoints / QEMU dirty bitmaps),\notherwise **full**. Pass `{\"type\": \"full\"}` to force a full backup\nand reset the chain.\n\nWorks with the VM running or stopped. When running, the backup is\ncrash-consistent (block-level snapshot taken by the hypervisor via\n`virDomainBackupBegin`); for application-consistent backups of\ndatabases, shut the VM down or quiesce it first (guest-agent fsfreeze\nintegration arrives in a later phase). An offline (stopped) backup is\nalways full.\n\nThe call is synchronous: it returns when the copy completes. Disk\nimages are stored as qcow2 in the server's backup directory\n(`ULTRAV_BACKUP_DIR`, default `/var/lib/ultrav/backups`), one folder\nper backup point, alongside a `metadata.json` and the saved\n`domain.xml`.\n",
         "parameters": [
           {
             "$ref": "#/components/parameters/VMId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupCreate"
+              },
+              "example": {
+                "type": "incremental"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Backup completed",
@@ -1659,7 +1672,7 @@
           "Backup"
         ],
         "summary": "Restore a backup into its virtual machine",
-        "description": "Overwrites the disks of the VM the backup was taken from with the\nbackup's disk images, and restores the saved domain configuration.\nThe VM must exist and be stopped (409 otherwise) \u2014 restore is\ndestructive: the current disk contents are replaced.\n\nThe restored VM reflects the state captured by the backup (hardware\nsettings come from the saved `domain.xml`). Backups of VMs that no\nlonger exist cannot be restored in this phase (delete the old VM\nmetadata manually or wait for restore-as-new-VM).\n",
+        "description": "Overwrites the disks of the VM the backup was taken from with the\nbackup's disk images, and restores the saved domain configuration.\nIncremental points are restored by replaying the whole chain\n(full \u2192 incrementals, oldest first). The VM must exist and be stopped\n(409 otherwise) \u2014 restore is destructive: the current disk contents\nare replaced.\n\nAfter a restore the backup chain is reset: the next backup will be a\nnew full (the domain's dirty-bitmap checkpoints are deleted, since\nthe disks now reflect an older point in time).\n\nThe restored VM reflects the state captured by the backup (hardware\nsettings come from the saved `domain.xml`). Backups of VMs that no\nlonger exist cannot be restored in this phase (delete the old VM\nmetadata manually or wait for restore-as-new-VM).\n",
         "parameters": [
           {
             "name": "id",
@@ -2877,9 +2890,17 @@
           "type": {
             "type": "string",
             "enum": [
-              "full"
+              "full",
+              "incremental"
             ],
-            "example": "full"
+            "example": "incremental",
+            "description": "`full` copies every disk in full and resets the chain;\n`incremental` copies only the blocks modified since the previous\npoint (requires a valid chain, i.e. the parent's checkpoint still\nexists in the domain).\n"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "For incremental points, the id of the backup this one continues from.",
+            "example": "bk-20250831-120000-c3d4"
           },
           "state": {
             "type": "string",
@@ -2908,6 +2929,20 @@
           "hasDomainXml": {
             "type": "boolean",
             "example": true
+          }
+        }
+      },
+      "BackupCreate": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "full",
+              "incremental"
+            ],
+            "description": "Force the point type. `incremental` fails with 409\n`BACKUP_INVALID_STATE` when no valid chain exists (e.g. after a\nrestore or if the parent checkpoint was deleted). Absent = auto\n(incremental when a chain is valid, full otherwise).\n",
+            "example": "incremental"
           }
         }
       },

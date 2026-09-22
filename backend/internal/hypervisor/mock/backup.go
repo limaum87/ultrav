@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
@@ -16,14 +17,19 @@ import (
 // metadata reports the full disk size, like a real sparse-aware backup).
 const backupImageHeaderBytes = 64 * 1024
 
+// backupIncrementalHeaderBytes is the (smaller) placeholder size of an
+// incremental image in the mock — only "dirty blocks" would be copied.
+const backupIncrementalHeaderBytes = 8 * 1024
+
 // backupSimulatedCopyTime models the elapsed copy work so callers observe a
 // realistic (short) latency in demonstrations.
 const backupSimulatedCopyTime = 200 * time.Millisecond
 
-// BackupVirtualMachine creates a full backup of the simulated VM: one
-// placeholder image per disk plus a synthesized domain XML, all recorded in
-// the shared backup library (real files on disk).
-func (p *Provider) BackupVirtualMachine(_ context.Context, id string) (types.Backup, error) {
+// BackupVirtualMachine creates a backup of the simulated VM: one placeholder
+// image per disk plus a synthesized domain XML, all recorded in the shared
+// backup library (real files on disk). Incremental points continue from the
+// newest point and carry a simulated checkpoint anchor.
+func (p *Provider) BackupVirtualMachine(_ context.Context, id string, req types.BackupCreate) (types.Backup, error) {
 	p.mu.Lock()
 	vm, ok := p.vms[id]
 	if !ok {
@@ -34,15 +40,48 @@ func (p *Provider) BackupVirtualMachine(_ context.Context, id string) (types.Bac
 		p.mu.Unlock()
 		return types.Backup{}, hypervisor.ErrInvalidVMState
 	}
+	running := vm.state == types.VMStateRunning
 	disks := vmDisks(vm)
 	p.mu.Unlock()
 
 	if p.backups == nil {
 		return types.Backup{}, fmt.Errorf("mock provider has no backup library configured")
 	}
+
+	// Chain decision mirrors the libvirt provider: auto = incremental when
+	// the newest point exists (running VMs only, since offline backups are
+	// always full); forced incremental without a chain is a 409.
+	var parent backup.Metadata
+	hasChain := false
+	if metas, err := p.backups.List(id); err == nil && len(metas) > 0 && metas[0].Checkpoint != "" {
+		parent = metas[0]
+		hasChain = true
+	}
+	incremental := hasChain && running
+	if req.Type != nil {
+		switch *req.Type {
+		case types.BackupCreateTypeFull:
+			incremental = false
+		case types.BackupCreateTypeIncremental:
+			if !hasChain {
+				return types.Backup{}, fmt.Errorf("%w: no valid backup chain for %q (take a full backup first)",
+					hypervisor.ErrBackupInvalidState, id)
+			}
+			incremental = true
+		}
+	}
+
 	pt, err := p.backups.Create(id)
 	if err != nil {
 		return types.Backup{}, err
+	}
+	if incremental {
+		pt.SetParent(parent.ID)
+	}
+	// Online points anchor a dirty-bitmap checkpoint for the next
+	// incremental; offline (stopped) points never do — mirrors libvirt.
+	if running {
+		pt.SetCheckpoint("chk-" + strings.TrimPrefix(pt.ID(), "bk-"))
 	}
 	defer func() {
 		if err != nil {
@@ -51,18 +90,22 @@ func (p *Provider) BackupVirtualMachine(_ context.Context, id string) (types.Bac
 	}()
 
 	time.Sleep(backupSimulatedCopyTime)
+	size := int64(backupImageHeaderBytes)
+	if incremental {
+		size = backupIncrementalHeaderBytes
+	}
 	for _, d := range disks {
 		format := backup.FormatQcow2
 		if d.Format == types.DiskFormatRaw {
 			format = backup.FormatRaw
 		}
 		path := pt.DiskPath(d.Name, format)
-		if err := writeSimulatedImage(path); err != nil {
+		if err := writeSimulatedImage(path, size); err != nil {
 			return types.Backup{}, err
 		}
 		// Record the on-disk size of the placeholder image (the real provider
 		// records the actual size of the copied image).
-		pt.SetDiskSize(d.Name, backupImageHeaderBytes)
+		pt.SetDiskSize(d.Name, size)
 	}
 	if err := os.WriteFile(pt.DomainXMLPath(), mockDomainXML(vm), 0o644); err != nil {
 		return types.Backup{}, err
@@ -136,6 +179,14 @@ func (p *Provider) RestoreBackup(_ context.Context, id string) (types.VirtualMac
 		}
 		return types.VirtualMachine{}, err
 	}
+	// An incremental restore requires the whole ancestor chain to exist.
+	for cur := meta; cur.ParentID != ""; {
+		cur, err = p.backups.Get(cur.ParentID)
+		if err != nil {
+			return types.VirtualMachine{}, fmt.Errorf("%w: the chain of backup %s is broken",
+				hypervisor.ErrBackupInvalidState, meta.ID)
+		}
+	}
 
 	p.mu.Lock()
 	vm, ok := p.vms[meta.VMID]
@@ -166,8 +217,8 @@ func (p *Provider) ExportVMConfig(_ context.Context, id string) ([]byte, error) 
 }
 
 // writeSimulatedImage writes a small placeholder disk image.
-func writeSimulatedImage(path string) error {
-	img := make([]byte, backupImageHeaderBytes)
+func writeSimulatedImage(path string, size int64) error {
+	img := make([]byte, size)
 	return os.WriteFile(path, img, 0o644)
 }
 
@@ -200,6 +251,11 @@ func mockDomainXML(vm *vmState) []byte {
 func metaToBackup(m backup.Metadata) types.Backup {
 	state := types.Complete
 	hasXML := m.HasDomainXML
+	var parentID *string
+	if m.ParentID != "" {
+		p := m.ParentID
+		parentID = &p
+	}
 	disks := make([]types.BackupDisk, 0, len(m.Disks))
 	var total int64
 	for _, d := range m.Disks {
@@ -217,6 +273,7 @@ func metaToBackup(m backup.Metadata) types.Backup {
 		VmId:         m.VMID,
 		VmName:       m.VMName,
 		Type:         types.BackupType(m.Type),
+		ParentId:     parentID,
 		State:        &state,
 		CreatedAt:    m.CreatedAt,
 		SizeBytes:    total,

@@ -57,8 +57,11 @@ const StateComplete State = "complete"
 // join this enum when checkpoint chains land.
 type Type string
 
-// TypeFull copies every disk in full.
+// TypeFull copies every disk in full (resets the chain).
 const TypeFull Type = "full"
+
+// TypeIncremental copies only the blocks modified since the parent point.
+const TypeIncremental Type = "incremental"
 
 // Disk describes one disk image inside a backup point.
 type Disk struct {
@@ -82,6 +85,12 @@ type Metadata struct {
 	CreatedAt    time.Time `json:"createdAt"`
 	Disks        []Disk    `json:"disks"`
 	HasDomainXML bool      `json:"hasDomainXml"`
+	// ParentID is the backup this incremental point continues from ("") for
+	// full points).
+	ParentID string `json:"parentId,omitempty"`
+	// Checkpoint is the libvirt checkpoint name created with this point
+	// (dirty-bitmap anchor for the next incremental; "" when none).
+	Checkpoint string `json:"checkpoint,omitempty"`
 }
 
 // Store is the backup library rooted at a directory.
@@ -159,6 +168,16 @@ func (p *Point) SetDiskSize(name string, size int64) {
 
 // SetDomainXML records (or removes, with false) the presence of domain.xml.
 func (p *Point) SetDomainXML(has bool) { p.meta.HasDomainXML = has }
+
+// SetParent records the point this incremental continues from and marks it
+// as an incremental point.
+func (p *Point) SetParent(id string) {
+	p.meta.ParentID = id
+	p.meta.Type = TypeIncremental
+}
+
+// SetCheckpoint records the dirty-bitmap anchor created with this point.
+func (p *Point) SetCheckpoint(name string) { p.meta.Checkpoint = name }
 
 // DomainXMLPath returns the path of the saved domain configuration.
 func (p *Point) DomainXMLPath() string { return filepath.Join(p.dir, "domain.xml") }

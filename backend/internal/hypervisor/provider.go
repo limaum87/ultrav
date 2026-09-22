@@ -74,11 +74,15 @@ type Provider interface {
 	// which bridge-mode virtual networks attach to.
 	ListHostBridges(ctx context.Context) ([]types.HostBridge, error)
 
-	// BackupVirtualMachine creates a full backup of every disk plus the
-	// domain configuration. Works with the VM running (crash-consistent,
-	// block-level snapshot) or stopped. Returns ErrVMNotFound for an unknown
-	// VM, ErrInvalidVMState while a power transition is in flight.
-	BackupVirtualMachine(ctx context.Context, id string) (types.Backup, error)
+	// BackupVirtualMachine creates a backup of every disk plus the domain
+	// configuration. req.Type forces full or incremental; nil/empty picks
+	// automatically (incremental when a valid chain exists, full otherwise).
+	// Works with the VM running (crash-consistent, block-level snapshot) or
+	// stopped (always full). Returns ErrVMNotFound for an unknown VM,
+	// ErrInvalidVMState while a power transition is in flight and
+	// ErrBackupInvalidState when an explicitly requested incremental has no
+	// valid chain.
+	BackupVirtualMachine(ctx context.Context, id string, req types.BackupCreate) (types.Backup, error)
 	// ListVMBackups returns the completed backup points of the VM, newest
 	// first. Returns ErrVMNotFound for an unknown VM.
 	ListVMBackups(ctx context.Context, id string) ([]types.Backup, error)

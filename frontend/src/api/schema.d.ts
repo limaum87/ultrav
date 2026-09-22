@@ -640,14 +640,22 @@ export interface paths {
         get: operations["listVMBackups"];
         put?: never;
         /**
-         * Create a full backup of a virtual machine
+         * Create a backup of a virtual machine (full or incremental)
          * @description Backs up every disk of the VM plus its domain configuration.
+         *
+         *     By default the engine picks the point type automatically:
+         *     **incremental** when a valid backup chain exists (previous point's
+         *     checkpoint present in the domain — only dirty blocks since the last
+         *     backup are copied, via libvirt checkpoints / QEMU dirty bitmaps),
+         *     otherwise **full**. Pass `{"type": "full"}` to force a full backup
+         *     and reset the chain.
          *
          *     Works with the VM running or stopped. When running, the backup is
          *     crash-consistent (block-level snapshot taken by the hypervisor via
          *     `virDomainBackupBegin`); for application-consistent backups of
          *     databases, shut the VM down or quiesce it first (guest-agent fsfreeze
-         *     integration arrives in a later phase).
+         *     integration arrives in a later phase). An offline (stopped) backup is
+         *     always full.
          *
          *     The call is synchronous: it returns when the copy completes. Disk
          *     images are stored as qcow2 in the server's backup directory
@@ -695,8 +703,14 @@ export interface paths {
          * Restore a backup into its virtual machine
          * @description Overwrites the disks of the VM the backup was taken from with the
          *     backup's disk images, and restores the saved domain configuration.
-         *     The VM must exist and be stopped (409 otherwise) — restore is
-         *     destructive: the current disk contents are replaced.
+         *     Incremental points are restored by replaying the whole chain
+         *     (full → incrementals, oldest first). The VM must exist and be stopped
+         *     (409 otherwise) — restore is destructive: the current disk contents
+         *     are replaced.
+         *
+         *     After a restore the backup chain is reset: the next backup will be a
+         *     new full (the domain's dirty-bitmap checkpoints are deleted, since
+         *     the disks now reflect an older point in time).
          *
          *     The restored VM reflects the state captured by the backup (hardware
          *     settings come from the saved `domain.xml`). Backups of VMs that no
@@ -1207,10 +1221,19 @@ export interface components {
             /** @example erp01 */
             vmName: string;
             /**
-             * @example full
+             * @description `full` copies every disk in full and resets the chain;
+             *     `incremental` copies only the blocks modified since the previous
+             *     point (requires a valid chain, i.e. the parent's checkpoint still
+             *     exists in the domain).
+             * @example incremental
              * @enum {string}
              */
-            type: "full";
+            type: "full" | "incremental";
+            /**
+             * @description For incremental points, the id of the backup this one continues from.
+             * @example bk-20250831-120000-c3d4
+             */
+            parentId?: string | null;
             /**
              * @example complete
              * @enum {string}
@@ -1230,6 +1253,17 @@ export interface components {
             disks: components["schemas"]["BackupDisk"][];
             /** @example true */
             hasDomainXml?: boolean;
+        };
+        BackupCreate: {
+            /**
+             * @description Force the point type. `incremental` fails with 409
+             *     `BACKUP_INVALID_STATE` when no valid chain exists (e.g. after a
+             *     restore or if the parent checkpoint was deleted). Absent = auto
+             *     (incremental when a chain is valid, full otherwise).
+             * @example incremental
+             * @enum {string}
+             */
+            type?: "full" | "incremental";
         };
         BackupDisk: {
             /** @example vda */
@@ -2866,7 +2900,16 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                /**
+                 * @example {
+                 *       "type": "incremental"
+                 *     }
+                 */
+                "application/json": components["schemas"]["BackupCreate"];
+            };
+        };
         responses: {
             /** @description Backup completed */
             201: {

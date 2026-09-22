@@ -20,7 +20,14 @@ const (
 
 // Defines values for BackupType.
 const (
-	Full BackupType = "full"
+	BackupTypeFull        BackupType = "full"
+	BackupTypeIncremental BackupType = "incremental"
+)
+
+// Defines values for BackupCreateType.
+const (
+	BackupCreateTypeFull        BackupCreateType = "full"
+	BackupCreateTypeIncremental BackupCreateType = "incremental"
 )
 
 // Defines values for BackupDiskFormat.
@@ -198,19 +205,45 @@ type Backup struct {
 	HasDomainXml *bool        `json:"hasDomainXml,omitempty"`
 	Id           string       `json:"id"`
 
+	// ParentId For incremental points, the id of the backup this one continues from.
+	ParentId *string `json:"parentId"`
+
 	// SizeBytes Total size of the backup's disk images on the backup storage.
 	SizeBytes int64        `json:"sizeBytes"`
 	State     *BackupState `json:"state,omitempty"`
-	Type      BackupType   `json:"type"`
-	VmId      string       `json:"vmId"`
-	VmName    string       `json:"vmName"`
+
+	// Type `full` copies every disk in full and resets the chain;
+	// `incremental` copies only the blocks modified since the previous
+	// point (requires a valid chain, i.e. the parent's checkpoint still
+	// exists in the domain).
+	Type   BackupType `json:"type"`
+	VmId   string     `json:"vmId"`
+	VmName string     `json:"vmName"`
 }
 
 // BackupState defines model for Backup.State.
 type BackupState string
 
-// BackupType defines model for Backup.Type.
+// BackupType `full` copies every disk in full and resets the chain;
+// `incremental` copies only the blocks modified since the previous
+// point (requires a valid chain, i.e. the parent's checkpoint still
+// exists in the domain).
 type BackupType string
+
+// BackupCreate defines model for BackupCreate.
+type BackupCreate struct {
+	// Type Force the point type. `incremental` fails with 409
+	// `BACKUP_INVALID_STATE` when no valid chain exists (e.g. after a
+	// restore or if the parent checkpoint was deleted). Absent = auto
+	// (incremental when a chain is valid, full otherwise).
+	Type *BackupCreateType `json:"type,omitempty"`
+}
+
+// BackupCreateType Force the point type. `incremental` fails with 409
+// `BACKUP_INVALID_STATE` when no valid chain exists (e.g. after a
+// restore or if the parent checkpoint was deleted). Absent = auto
+// (incremental when a chain is valid, full otherwise).
+type BackupCreateType string
 
 // BackupDisk defines model for BackupDisk.
 type BackupDisk struct {
@@ -785,3 +818,6 @@ type CreateVirtualMachineJSONRequestBody = VirtualMachineCreate
 
 // UpdateVirtualMachineJSONRequestBody defines body for UpdateVirtualMachine for application/json ContentType.
 type UpdateVirtualMachineJSONRequestBody = VirtualMachineUpdate
+
+// CreateVMBackupJSONRequestBody defines body for CreateVMBackup for application/json ContentType.
+type CreateVMBackupJSONRequestBody = BackupCreate

@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
@@ -19,9 +22,21 @@ func (s *Server) handleListVMBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, types.BackupList{Items: backups, Total: len(backups)})
 }
 
-// handleCreateVMBackup runs a full backup of the VM (synchronous).
+// handleCreateVMBackup runs a backup of the VM (synchronous). The body is
+// optional: {"type": "full"|"incremental"} forces the point type; absent = auto.
 func (s *Server) handleCreateVMBackup(w http.ResponseWriter, r *http.Request) {
-	backup, err := s.provider.BackupVirtualMachine(r.Context(), r.PathValue("id"))
+	var req types.BackupCreate
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			s.writeError(w, r, CodeValidationError, "Invalid JSON body")
+			return
+		}
+	}
+	if req.Type != nil && *req.Type != types.BackupCreateTypeFull && *req.Type != types.BackupCreateTypeIncremental {
+		s.writeError(w, r, CodeValidationError, "type must be 'full' or 'incremental'")
+		return
+	}
+	backup, err := s.provider.BackupVirtualMachine(r.Context(), r.PathValue("id"), req)
 	if err != nil {
 		s.writeProviderError(w, r, err)
 		return

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -27,12 +26,20 @@ const (
 	backupPollInterval = 500 * time.Millisecond
 	// backupDiskTempSuffix is used for the temp file during restore.
 	backupDiskTempSuffix = ".restore-tmp"
+	// backupPoolPrefix names the transient per-point pools UltraV defines
+	// over backup point directories during restore.
+	backupPoolPrefix = "ultrav-bk-"
+	// backupDiskDownloadSuffix marks the backend-readable copies of the
+	// qemu-owned backup images, streamed via libvirtd for restore.
+	backupDiskDownloadSuffix = ".download"
 )
 
-// BackupVirtualMachine creates a full backup of every disk plus the domain
+// BackupVirtualMachine creates a backup of every disk plus the domain
 // configuration. Running domains are backed up with virDomainBackupBegin
 // (block-level, crash-consistent); stopped domains with a plain image copy.
-func (p *Provider) BackupVirtualMachine(ctx context.Context, id string) (types.Backup, error) {
+// Incremental points continue from the newest point's checkpoint; when the
+// chain is invalid (or req forces full) a new full is taken.
+func (p *Provider) BackupVirtualMachine(ctx context.Context, id string, req types.BackupCreate) (types.Backup, error) {
 	err := p.withConn(func(c *libvirt.Connect) error {
 		dom, err := c.LookupDomainByName(id)
 		if err != nil {
@@ -40,11 +47,16 @@ func (p *Provider) BackupVirtualMachine(ctx context.Context, id string) (types.B
 		}
 		defer dom.Free()
 
+		parentID, parentCheckpoint, err := p.backupChainParent(dom, id, req)
+		if err != nil {
+			return err
+		}
 		state, _, _ := dom.GetState()
 		if state == libvirt.DOMAIN_SHUTOFF {
-			return p.backupOffline(ctx, dom, id)
+			// Offline images cannot carry dirty bitmaps: always full.
+			return p.backupOffline(ctx, c, dom, id)
 		}
-		return p.backupOnline(ctx, dom, id)
+		return p.backupOnline(ctx, dom, id, parentID, parentCheckpoint)
 	})
 	if err != nil {
 		return types.Backup{}, err
@@ -58,13 +70,20 @@ func (p *Provider) BackupVirtualMachine(ctx context.Context, id string) (types.B
 
 // backupOnline performs a push-mode virDomainBackupBegin on a running
 // domain. The hypervisor copies each disk (with the internal snapshot
-// consistency) into the backup point directory.
-func (p *Provider) backupOnline(ctx context.Context, dom *libvirt.Domain, id string) error {
+// consistency) into the backup point directory. parentID/parentCheckpoint
+// chain this point to the previous one (both "" for a full).
+func (p *Provider) backupOnline(ctx context.Context, dom *libvirt.Domain, id, parentID, parentCheckpoint string) error {
 	pt, err := p.backups.Create(id)
 	if err != nil {
 		return err
 	}
 	fail := func(err error) error { pt.Abort(); return err }
+	if parentID != "" {
+		pt.SetParent(parentID)
+	}
+	// Dirty-bitmap anchor for the NEXT incremental, tied to this point.
+	checkpoint := "chk-" + strings.TrimPrefix(pt.ID(), "bk-")
+	pt.SetCheckpoint(checkpoint)
 
 	// Capture the domain configuration as it is at backup time.
 	domXML, err := dom.GetXMLDesc(0)
@@ -76,7 +95,7 @@ func (p *Provider) backupOnline(ctx context.Context, dom *libvirt.Domain, id str
 	if err := xmlUnmarshal([]byte(domXML), &parsed); err != nil {
 		return fail(fmt.Errorf("parse domain XML: %w", err))
 	}
-	var diskDefs []string
+	var diskDefs, ckptDisks []string
 	for _, d := range parsed.Disks {
 		if d.Device != "disk" || d.Source.File == "" {
 			continue
@@ -85,13 +104,24 @@ func (p *Provider) backupOnline(ctx context.Context, dom *libvirt.Domain, id str
 		diskDefs = append(diskDefs, fmt.Sprintf(
 			"  <disk name='%s' type='file'>\n    <target file='%s'/>\n    <driver type='qcow2'/>\n  </disk>",
 			d.Target.Dev, xmlEscape(target)))
+		ckptDisks = append(ckptDisks, fmt.Sprintf("    <disk name='%s' checkpoint='bitmap'/>", d.Target.Dev))
 	}
 	if len(diskDefs) == 0 {
 		return fail(fmt.Errorf("domain %q has no file-backed disks to back up", id))
 	}
-	backupXML := "<domainbackup mode='push'>\n" + strings.Join(diskDefs, "\n") + "\n</domainbackup>"
+	incremental := ""
+	if parentCheckpoint != "" {
+		// The <incremental> element names the checkpoint to continue from;
+		// QEMU copies only the blocks dirtied since that point.
+		incremental = fmt.Sprintf("  <incremental>%s</incremental>\n", xmlEscape(parentCheckpoint))
+	}
+	backupXML := "<domainbackup mode='push'>\n" + incremental +
+		"  <disks>\n" + strings.Join(diskDefs, "\n") + "\n  </disks>\n</domainbackup>"
+	checkpointXML := fmt.Sprintf(
+		"<domaincheckpoint>\n  <name>%s</name>\n  <description>ultrav backup point %s</description>\n  <disks>\n%s\n  </disks>\n</domaincheckpoint>",
+		checkpoint, pt.ID(), strings.Join(ckptDisks, "\n"))
 
-	if err := dom.BackupBegin(backupXML, "", 0); err != nil {
+	if err := dom.BackupBegin(backupXML, checkpointXML, 0); err != nil {
 		return fail(fmt.Errorf("begin backup job: %w", err))
 	}
 	slog.Info("backup job started", "vm", id, "point", pt.ID(), "disks", len(diskDefs))
@@ -110,10 +140,24 @@ func (p *Provider) backupOnline(ctx context.Context, dom *libvirt.Domain, id str
 			break
 		}
 		if info.Type == libvirt.DOMAIN_JOB_NONE {
-			// Older daemons drop the job record as soon as it ends.
+			// The job record vanished: either it never started or the daemon
+			// dropped it (e.g. it failed instantly). Confirm by checking the
+			// produced images below.
 			break
 		}
 		time.Sleep(backupPollInterval)
+	}
+
+	// A vanished job record or a qemu-level failure (ENOSPC mid-copy, for
+	// example) is only visible through the produced files: every disk image
+	// must exist and be non-empty, otherwise the point is invalid.
+	meta := pt.Meta()
+	for _, d := range meta.Disks {
+		fi, err := os.Stat(filepath.Join(pt.Dir(), d.File))
+		if err != nil || fi.Size() == 0 {
+			return fail(fmt.Errorf("backup job produced no image for disk %s "+
+				"(check host free space and libvirt logs: journalctl -u libvirtd)", d.Name))
+		}
 	}
 
 	if err := os.WriteFile(pt.DomainXMLPath(), []byte(domXML), 0o644); err != nil {
@@ -126,7 +170,7 @@ func (p *Provider) backupOnline(ctx context.Context, dom *libvirt.Domain, id str
 
 // backupOffline copies the disk images directly (the domain is stopped, so a
 // file copy is consistent by definition).
-func (p *Provider) backupOffline(ctx context.Context, dom *libvirt.Domain, id string) error {
+func (p *Provider) backupOffline(ctx context.Context, c *libvirt.Connect, dom *libvirt.Domain, id string) error {
 	pt, err := p.backups.Create(id)
 	if err != nil {
 		return err
@@ -146,7 +190,10 @@ func (p *Provider) backupOffline(ctx context.Context, dom *libvirt.Domain, id st
 			continue
 		}
 		target := pt.DiskPath(d.Target.Dev, backup.FormatQcow2)
-		if err := copyFile(ctx, d.Source.File, target); err != nil {
+		// Stream through libvirtd rather than copying the file directly: the
+		// images are qemu-owned (0600) and may not even be mounted at the
+		// same path inside a containerized backend (Regra dos caminhos).
+		if err := p.downloadVolumeTo(ctx, c, d.Source.File, target); err != nil {
 			return fail(fmt.Errorf("copy disk %s: %w", d.Target.Dev, err))
 		}
 	}
@@ -180,13 +227,33 @@ func (p *Provider) ListVMBackups(_ context.Context, id string) ([]types.Backup, 
 	return out, err
 }
 
-// DeleteBackup removes a backup point from the library.
+// DeleteBackup removes a backup point from the library and drops its
+// dirty-bitmap checkpoint from the domain, if any (otherwise deleting the
+// newest point would silently break the incremental chain).
 func (p *Provider) DeleteBackup(_ context.Context, id string) error {
-	if err := p.backups.Delete(id); err != nil {
+	meta, err := p.backups.Get(id)
+	if err != nil {
 		if err == backup.ErrNotFound {
 			return hypervisor.ErrBackupNotFound
 		}
 		return err
+	}
+	if err := p.backups.Delete(id); err != nil {
+		return err
+	}
+	if meta.Checkpoint != "" {
+		_ = p.withConn(func(c *libvirt.Connect) error {
+			dom, err := c.LookupDomainByName(meta.VMID)
+			if err != nil {
+				return nil // domain is gone; nothing to clean
+			}
+			defer dom.Free()
+			if cp, err := dom.CheckpointLookupByName(meta.Checkpoint, 0); err == nil {
+				_ = cp.Delete(0)
+				cp.Free()
+			}
+			return nil
+		})
 	}
 	return nil
 }
@@ -240,17 +307,29 @@ func (p *Provider) RestoreBackup(ctx context.Context, id string) (types.VirtualM
 			}
 		}
 
+		// Resolve the restore chain: the point itself (full) or its full
+		// ancestor chain (incremental), oldest first.
+		chain, err := p.restoreChain(meta)
+		if err != nil {
+			dom.Free()
+			return err
+		}
 		for _, bd := range meta.Disks {
 			dst, ok := sources[bd.Name]
 			if !ok {
 				dom.Free()
 				return fmt.Errorf("backup disk %s has no matching disk in domain %q", bd.Name, meta.VMID)
 			}
-			if err := restoreDisk(ctx, filepath.Join(dir, bd.File), dst, string(bd.Format)); err != nil {
+			if err := p.restoreDiskChain(ctx, c, chain, bd.Name, dst); err != nil {
 				dom.Free()
 				return fmt.Errorf("restore disk %s: %w", bd.Name, err)
 			}
 		}
+
+		// The disks now reflect an older point in time: the dirty-bitmap
+		// checkpoints are stale. Drop them so the next backup takes a new
+		// full and starts a clean chain.
+		deleteUltravCheckpoints(dom)
 
 		// Redefine the domain from the saved configuration (best effort: the
 		// disks are already restored; a failed redefine is logged, not fatal).
@@ -297,6 +376,43 @@ func (p *Provider) ExportVMConfig(_ context.Context, id string) ([]byte, error) 
 	return out, err
 }
 
+// backupChainParent decides the chain anchor of the requested backup:
+//   - forced full → ""/"" (chain reset);
+//   - forced incremental → (newest point id, its checkpoint), verified in
+//     the domain (ErrBackupInvalidState when missing);
+//   - auto → same as incremental, falling back to full silently.
+func (p *Provider) backupChainParent(dom *libvirt.Domain, id string, req types.BackupCreate) (string, string, error) {
+	forced := ""
+	if req.Type != nil {
+		forced = string(*req.Type)
+	}
+	metas, err := p.backups.List(id)
+	if err != nil {
+		return "", "", err
+	}
+	if backup.Type(forced) == backup.TypeFull {
+		return "", "", nil // explicit full always resets the chain
+	}
+	forcedIncr := backup.Type(forced) == backup.TypeIncremental
+	if len(metas) == 0 || metas[0].Checkpoint == "" {
+		if forcedIncr {
+			return "", "", fmt.Errorf("%w: no valid backup chain for %q (the previous point has no dirty-bitmap checkpoint — take a full backup first)", hypervisor.ErrBackupInvalidState, id)
+		}
+		return "", "", nil
+	}
+	// The chain is only valid if libvirt still has the parent checkpoint
+	// (deleted on restore, or by an operator via virsh).
+	cp, err := dom.CheckpointLookupByName(metas[0].Checkpoint, 0)
+	if err != nil {
+		if forcedIncr {
+			return "", "", fmt.Errorf("%w: the checkpoint of backup %s no longer exists in the domain — take a full backup first", hypervisor.ErrBackupInvalidState, metas[0].ID)
+		}
+		return "", "", nil
+	}
+	cp.Free()
+	return metas[0].ID, metas[0].Checkpoint, nil
+}
+
 // --- helpers ---
 
 // recordDiskSizes fills in each disk's on-disk size after the copy.
@@ -309,55 +425,188 @@ func recordDiskSizes(pt *backup.Point, dir string) {
 	}
 }
 
-// restoreDisk copies a backup image over the domain's volume: convert into a
-// temp file in the same directory, then atomically rename over the original.
-func restoreDisk(ctx context.Context, src, dst, format string) error {
+// restoreChain resolves the ancestor chain of a backup point, oldest first
+// ([full, incr, ..., point]). Incremental points require an unbroken chain.
+func (p *Provider) restoreChain(meta backup.Metadata) ([]backup.Metadata, error) {
+	chain := []backup.Metadata{meta}
+	cur := meta
+	for cur.ParentID != "" {
+		parent, err := p.backups.Get(cur.ParentID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: the chain of backup %s is broken (parent %s is gone)",
+				hypervisor.ErrBackupInvalidState, meta.ID, cur.ParentID)
+		}
+		chain = append([]backup.Metadata{parent}, chain...)
+		cur = parent
+	}
+	return chain, nil
+}
+
+// restoreDiskChain materializes a backup chain onto the domain's volume:
+// the full image is converted into a temp file, then each incremental is
+// replayed on top of it (qemu-img convert -n writes only the clusters the
+// incremental image allocated), and finally the temp atomically renames over
+// the original volume.
+func (p *Provider) restoreDiskChain(ctx context.Context, c *libvirt.Connect, chain []backup.Metadata, disk, dst string) error {
 	tmp := dst + backupDiskTempSuffix
 	defer os.Remove(tmp)
-	cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-O", format, src, tmp)
+
+	// The backup images are owned by qemu (root, 0600) and cannot be opened
+	// by the backend directly: stream each chain image from libvirtd into a
+	// backend-owned temp copy first.
+	type srcImage struct {
+		path    string
+		format  backup.Format
+		cleanup string
+	}
+	var sources []srcImage
+	defer func() {
+		for _, s := range sources {
+			os.Remove(s.cleanup)
+		}
+	}()
+	for _, m := range chain {
+		file, format, err := diskImage(m, disk)
+		if err != nil {
+			return err
+		}
+		dir, err := p.backups.PointDir(m.ID)
+		if err != nil {
+			return err
+		}
+		image := filepath.Join(dir, file)
+		release, err := p.ensurePointPool(c, m.ID, dir)
+		if err != nil {
+			return err
+		}
+		local := image + backupDiskDownloadSuffix
+		err = p.downloadVolumeTo(ctx, c, image, local)
+		release()
+		if err != nil {
+			return err
+		}
+		// Incremental images carry a <backingStore> pointing at the VM's
+		// original disk; detach it on the local copy (unsafe rebase only
+		// rewrites the pointer) so qemu-img never needs the original.
+		if m.ParentID != "" {
+			if out, err := exec.CommandContext(ctx, "qemu-img", "rebase", "-u", "-b", "", local).CombinedOutput(); err != nil {
+				return fmt.Errorf("qemu-img rebase: %s: %w", strings.TrimSpace(string(out)), err)
+			}
+		}
+		sources = append(sources, srcImage{path: local, format: format, cleanup: local})
+	}
+
+	// Step 1: the full image (chain head) into the restore temp file.
+	cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-O", string(sources[0].format),
+		sources[0].path, tmp)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("qemu-img convert: %s: %w", strings.TrimSpace(string(out)), err)
+		return fmt.Errorf("qemu-img convert (full): %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	// Step 2: replay each incremental in chronological order (-n: write only
+	// the clusters allocated in the incremental image).
+	for _, s := range sources[1:] {
+		cmd := exec.CommandContext(ctx, "qemu-img", "convert", "-n", "-O", string(s.format),
+			s.path, tmp)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("qemu-img convert: %s: %w", strings.TrimSpace(string(out)), err)
+		}
 	}
 	return os.Rename(tmp, dst)
 }
 
-// copyFile copies src to dst honoring context cancellation, reserving the
-// destination size up front (sparse-friendly).
-func copyFile(ctx context.Context, src, dst string) error {
-	in, err := os.Open(src)
+// ensurePointPool exposes one backup point's directory as a transient
+// storage pool, so libvirtd can address its images as volumes (needed to
+// stream qemu-owned files the backend user cannot open directly). The
+// returned release func destroys and undefines the pool.
+func (p *Provider) ensurePointPool(c *libvirt.Connect, id, dir string) (release func(), err error) {
+	name := backupPoolPrefix + strings.TrimPrefix(id, "bk-")
+	if pool, err := c.LookupStoragePoolByName(name); err == nil {
+		defer pool.Free()
+		return func() {}, nil // leftover from a crashed run; good enough
+	}
+	poolXML := fmt.Sprintf(
+		"<pool type='dir'>\n  <name>%s</name>\n  <target>\n    <path>%s</path>\n  </target>\n</pool>",
+		name, xmlEscape(dir))
+	pool, err := c.StoragePoolDefineXML(poolXML, 0)
+	if err != nil {
+		return nil, fmt.Errorf("define backup point pool %s: %w", name, err)
+	}
+	release = func() {
+		_ = pool.Destroy()
+		_ = pool.Undefine()
+		pool.Free()
+	}
+	if err := pool.Build(0); err != nil {
+		release()
+		return nil, fmt.Errorf("build backup point pool %s: %w", name, err)
+	}
+	if err := pool.Create(0); err != nil {
+		release()
+		return nil, fmt.Errorf("start backup point pool %s: %w", name, err)
+	}
+	_ = pool.Refresh(0)
+	return release, nil
+}
+
+// downloadVolumeTo streams a storage volume (any path on the host, even one
+// the backend user cannot open directly, like qemu-owned backup images)
+// into a local file via libvirtd.
+func (p *Provider) downloadVolumeTo(_ context.Context, c *libvirt.Connect, path, dst string) error {
+	vol, err := c.LookupStorageVolByPath(path)
+	if err != nil {
+		return fmt.Errorf("lookup volume %s: %w", path, err)
+	}
+	defer vol.Free()
+	stream, err := c.NewStream(0)
 	if err != nil {
 		return err
 	}
-	defer in.Close()
-	fi, err := in.Stat()
-	if err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	defer stream.Free()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	if err := out.Truncate(fi.Size()); err != nil {
-		return err
+
+	errc := make(chan error, 1)
+	go func() {
+		sink := func(_ *libvirt.Stream, data []byte) (int, error) {
+			return out.Write(data)
+		}
+		errc <- stream.RecvAll(libvirt.StreamSinkFunc(sink))
+	}()
+	if err := vol.Download(stream, 0, 0, 0); err != nil {
+		return fmt.Errorf("download %s: %w", path, err)
 	}
-	buf := make([]byte, 4*1024*1024)
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
+	if err := <-errc; err != nil {
+		return fmt.Errorf("stream %s: %w", path, err)
+	}
+	return nil
+}
+
+// diskImage finds the image entry of a disk inside a backup point.
+func diskImage(m backup.Metadata, disk string) (string, backup.Format, error) {
+	for _, d := range m.Disks {
+		if d.Name == disk {
+			return d.File, d.Format, nil
 		}
-		n, rerr := in.Read(buf)
-		if n > 0 {
-			if _, werr := out.Write(buf[:n]); werr != nil {
-				return werr
-			}
+	}
+	return "", "", fmt.Errorf("backup %s has no image for disk %s", m.ID, disk)
+}
+
+// deleteUltravCheckpoints removes the dirty-bitmap checkpoints UltraV
+// created for this domain (best effort; ignores not-found errors).
+func deleteUltravCheckpoints(dom *libvirt.Domain) {
+	cps, err := dom.ListAllCheckpoints(0)
+	if err != nil {
+		return
+	}
+	for i := range cps {
+		if name, err := cps[i].GetName(); err == nil && strings.HasPrefix(name, "chk-") {
+			_ = cps[i].Delete(0)
 		}
-		if rerr != nil {
-			if rerr == io.EOF {
-				return nil
-			}
-			return rerr
-		}
+		cps[i].Free()
 	}
 }
 
@@ -381,6 +630,11 @@ func refreshDomainPools(c *libvirt.Connect, parsed domainXML) {
 func metaToBackup(m backup.Metadata) types.Backup {
 	state := types.BackupState(m.State)
 	hasXML := m.HasDomainXML
+	var parentID *string
+	if m.ParentID != "" {
+		p := m.ParentID
+		parentID = &p
+	}
 	disks := make([]types.BackupDisk, 0, len(m.Disks))
 	var total int64
 	for _, d := range m.Disks {
@@ -398,6 +652,7 @@ func metaToBackup(m backup.Metadata) types.Backup {
 		VmId:         m.VMID,
 		VmName:       m.VMName,
 		Type:         types.BackupType(m.Type),
+		ParentId:     parentID,
 		State:        &state,
 		CreatedAt:    m.CreatedAt,
 		SizeBytes:    total,
