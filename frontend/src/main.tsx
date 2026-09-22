@@ -9,6 +9,7 @@ import VirtualMachines from './pages/VirtualMachines';
 import VMDetails from './pages/VMDetails';
 import ConsoleFullscreen from './pages/ConsoleFullscreen';
 import ComingSoon from './pages/ComingSoon';
+import Backups from './pages/Backups';
 import Storage from './pages/Storage';
 import NetworkPage from './pages/Network';
 import Settings from './pages/Settings';
@@ -28,7 +29,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/vms/:id" element={<VMDetails />} />
             <Route path="/storage" element={<Storage />} />
             <Route path="/network" element={<NetworkPage />} />
-            <Route path="/backups" element={<ComingSoon title="Backups" />} />
+            <Route path="/backups" element={<Backups />} />
             <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

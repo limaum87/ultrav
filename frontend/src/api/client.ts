@@ -49,6 +49,11 @@ export type StoragePool = components['schemas']['StoragePool'];
 export type Network = components['schemas']['Network'];
 export type HostBridgeList = components['schemas']['HostBridgeList'];
 export type Iso = components['schemas']['Iso'];
+export type Backup = components['schemas']['Backup'];
+export type BackupDisk = components['schemas']['BackupDisk'];
+export type BackupList = components['schemas']['BackupList'];
+export type BackupSchedule = components['schemas']['BackupSchedule'];
+export type BackupScheduleList = components['schemas']['BackupScheduleList'];
 export type LoginResponse = components['schemas']['LoginResponse'];
 export type User = components['schemas']['User'];
 

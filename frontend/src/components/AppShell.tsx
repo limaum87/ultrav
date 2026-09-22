@@ -34,7 +34,7 @@ const nav = [
   { to: '/vms', label: 'Virtual Machines', icon: navIcon(Monitor), end: false },
   { to: '/storage', label: 'Storage', icon: navIcon(HardDrive), end: false },
   { to: '/network', label: 'Network', icon: navIcon(Network), end: false },
-  { to: '/backups', label: 'Backups', icon: navIcon(DatabaseBackup), end: false, soon: true },
+  { to: '/backups', label: 'Backups', icon: navIcon(DatabaseBackup), end: false },
   { to: '/tasks', label: 'Tasks', icon: navIcon(ListChecks), end: false, soon: true },
   { to: '/settings', label: 'Settings', icon: navIcon(Settings), end: false },
 ];
