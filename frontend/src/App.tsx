@@ -9,10 +9,10 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="login-page">
-        <div className="login-card" style={{ textAlign: 'center' }}>
+      <div className="login-page login-loading">
+        <div className="login-loading-card">
           <span className="brand-mark">UV</span>
-          <p>Carregando…</p>
+          <p>Loading…</p>
         </div>
       </div>
     );
