@@ -182,6 +182,23 @@ const (
 	StoragePoolCreateTypeDir StoragePoolCreateType = "dir"
 )
 
+// Defines values for TaskType.
+const (
+	TaskTypeBackupCreate  TaskType = "backup-create"
+	TaskTypeBackupRestore TaskType = "backup-restore"
+	TaskTypeVmCreate      TaskType = "vm-create"
+)
+
+// Defines values for TaskStatus.
+const (
+	TaskStatusCancelled  TaskStatus = "cancelled"
+	TaskStatusCancelling TaskStatus = "cancelling"
+	TaskStatusFailed     TaskStatus = "failed"
+	TaskStatusQueued     TaskStatus = "queued"
+	TaskStatusRunning    TaskStatus = "running"
+	TaskStatusSucceeded  TaskStatus = "succeeded"
+)
+
 // Defines values for UserRole.
 const (
 	UserRoleAdmin  UserRole = "admin"
@@ -425,7 +442,7 @@ type DiskCreateFormat string
 // Error defines model for Error.
 type Error struct {
 	Error struct {
-		// Code Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), SCHEDULE_NOT_FOUND, INTERNAL_ERROR.
+		// Code Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), SCHEDULE_NOT_FOUND, TASK_NOT_FOUND, TASK_NOT_CANCELLABLE (the task already reached a terminal state), INTERNAL_ERROR.
 		Code      string `json:"code"`
 		Message   string `json:"message"`
 		RequestId string `json:"requestId"`
@@ -668,6 +685,48 @@ type StoragePoolList struct {
 	Total int           `json:"total"`
 }
 
+// Task defines model for Task.
+type Task struct {
+	// Cancellable Whether cancelTask can still be called.
+	Cancellable bool      `json:"cancellable"`
+	CreatedAt   time.Time `json:"createdAt"`
+
+	// Error Failure reason when status is failed.
+	Error      *string    `json:"error,omitempty"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Id         string     `json:"id"`
+
+	// Message Current step description, when available.
+	Message  *string `json:"message,omitempty"`
+	Progress int     `json:"progress"`
+
+	// ResourceId Identifier of the produced resource (VM name, backup point id). Empty while unknown.
+	ResourceId *string `json:"resourceId,omitempty"`
+
+	// ResourceName Human-readable target of the task (e.g. the VM name).
+	ResourceName *string    `json:"resourceName,omitempty"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+
+	// Status queued: accepted, not started yet. running: worker executing. cancelling: cancel requested, waiting for the worker to return. succeeded/failed/cancelled: terminal states.
+	Status TaskStatus `json:"status"`
+	Type   TaskType   `json:"type"`
+
+	// Warnings Non-fatal notes collected during execution (e.g. profile warnings).
+	Warnings *[]string `json:"warnings,omitempty"`
+}
+
+// TaskType defines model for Task.Type.
+type TaskType string
+
+// TaskList defines model for TaskList.
+type TaskList struct {
+	Items []Task `json:"items"`
+	Total int    `json:"total"`
+}
+
+// TaskStatus queued: accepted, not started yet. running: worker executing. cancelling: cancel requested, waiting for the worker to return. succeeded/failed/cancelled: terminal states.
+type TaskStatus string
+
 // UpdatePasswordRequest defines model for UpdatePasswordRequest.
 type UpdatePasswordRequest struct {
 	Password string `json:"password"`
@@ -836,6 +895,9 @@ type ResourceID = string
 // ScheduleId defines model for ScheduleId.
 type ScheduleId = string
 
+// TaskId defines model for TaskId.
+type TaskId = string
+
 // UserId defines model for UserId.
 type UserId = int
 
@@ -869,6 +931,12 @@ type ValidationError = Error
 // UploadIsoMultipartBody defines parameters for UploadIso.
 type UploadIsoMultipartBody struct {
 	File openapi_types.File `json:"file"`
+}
+
+// ListTasksParams defines parameters for ListTasks.
+type ListTasksParams struct {
+	Status *TaskStatus `form:"status,omitempty" json:"status,omitempty"`
+	Limit  *int        `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // DeleteVirtualMachineParams defines parameters for DeleteVirtualMachine.

@@ -552,7 +552,7 @@ func (p *Provider) ensurePointPool(c *libvirt.Connect, id, dir string) (release 
 // downloadVolumeTo streams a storage volume (any path on the host, even one
 // the backend user cannot open directly, like qemu-owned backup images)
 // into a local file via libvirtd.
-func (p *Provider) downloadVolumeTo(_ context.Context, c *libvirt.Connect, path, dst string) error {
+func (p *Provider) downloadVolumeTo(ctx context.Context, c *libvirt.Connect, path, dst string) error {
 	vol, err := c.LookupStorageVolByPath(path)
 	if err != nil {
 		return fmt.Errorf("lookup volume %s: %w", path, err)
@@ -579,10 +579,18 @@ func (p *Provider) downloadVolumeTo(_ context.Context, c *libvirt.Connect, path,
 	if err := vol.Download(stream, 0, 0, 0); err != nil {
 		return fmt.Errorf("download %s: %w", path, err)
 	}
-	if err := <-errc; err != nil {
-		return fmt.Errorf("stream %s: %w", path, err)
+	// Honor cancellation: aborting the stream unblocks RecvAll, otherwise a
+	// cancelled backup/restore keeps copying until the volume ends.
+	select {
+	case <-ctx.Done():
+		_ = stream.Abort()
+		return fmt.Errorf("download %s: %w", path, ctx.Err())
+	case err := <-errc:
+		if err != nil {
+			return fmt.Errorf("stream %s: %w", path, err)
+		}
+		return nil
 	}
-	return nil
 }
 
 // diskImage finds the image entry of a disk inside a backup point.

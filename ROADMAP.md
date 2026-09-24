@@ -29,7 +29,7 @@
 - [x] Storage pools: leitura + refresh (`listStoragePools`, `getStoragePool`, `refreshStoragePool`)
 - [x] Networks: leitura + start/stop (`listNetworks`, `getNetwork`, `startNetwork`, `stopNetwork`)
 - [ ] Instalação/target: Ubuntu Server, Debian
-- [ ] `createVirtualMachine` (assíncrono → Job System v1)
+- [x] Job System v1 (`/tasks`: list/get/cancel) + `createVirtualMachine`, backup e restore assíncronos + UI Tasks
 - [x] Perfis de performance por SO na criação (`osType`: linux/windows/other; virtio-scsi + iothread, Hyper-V enlightenments com feature detection, canal do guest agent, ISO de drivers VirtIO para Windows)
 - [ ] Snapshots
 - [ ] Cloud-init

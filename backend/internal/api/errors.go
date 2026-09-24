@@ -39,6 +39,8 @@ const (
 	CodeBackupInvalidState    = "BACKUP_INVALID_STATE"
 	CodeScheduleNotFound      = "SCHEDULE_NOT_FOUND"
 	CodeScheduleAlreadyExists = "SCHEDULE_ALREADY_EXISTS"
+	CodeTaskNotFound          = "TASK_NOT_FOUND"
+	CodeTaskNotCancellable    = "TASK_NOT_CANCELLABLE"
 )
 
 // errorStatus maps error codes to HTTP status codes.
@@ -71,6 +73,8 @@ var errorStatus = map[string]int{
 	CodeBackupInvalidState:    http.StatusConflict,
 	CodeScheduleNotFound:      http.StatusNotFound,
 	CodeScheduleAlreadyExists: http.StatusConflict,
+	CodeTaskNotFound:          http.StatusNotFound,
+	CodeTaskNotCancellable:    http.StatusConflict,
 }
 
 // writeError writes the standard error envelope. Internal details are logged,

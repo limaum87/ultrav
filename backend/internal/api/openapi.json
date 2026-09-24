@@ -47,6 +47,10 @@
     {
       "name": "Backup",
       "description": "Virtual machine backup and restore"
+    },
+    {
+      "name": "Tasks",
+      "description": "Async job system (VM creation, backups, restores)"
     }
   ],
   "paths": {
@@ -1222,28 +1226,18 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Virtual machine created",
+          "202": {
+            "description": "Creation accepted and running in the background as a task\n(volume allocation + domain definition). Poll `GET /tasks/{id}`\nuntil the status is `succeeded` or `failed`; profile warnings\n(e.g. VirtIO drivers missing for Windows) are reported in the\ntask's `warnings[]`.\n",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VirtualMachine"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
           },
           "400": {
             "description": "Invalid create specification",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "A virtual machine with this name already exists",
             "content": {
               "application/json": {
                 "schema": {
@@ -1762,21 +1756,18 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Backup completed",
+          "202": {
+            "description": "Backup accepted and running in the background as a task. Poll\n`GET /tasks/{id}` until the status is `succeeded` or `failed`;\nthe finished task's `resourceId` is the backup point id.\n",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Backup"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
           },
           "404": {
             "$ref": "#/components/responses/VMNotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/VMInvalidState"
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -1840,28 +1831,18 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Restore completed (returns the restored VM)",
+          "202": {
+            "description": "Restore accepted and running in the background as a task. Poll\n`GET /tasks/{id}` until the status is `succeeded` or `failed`.\nFailure reasons (VM running, backup's VM no longer exists) are\nreported in the task's `error`.\n",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VirtualMachine"
+                  "$ref": "#/components/schemas/Task"
                 }
               }
             }
           },
           "404": {
             "$ref": "#/components/responses/BackupNotFound"
-          },
-          "409": {
-            "description": "VM is running, or no longer exists (code `BACKUP_INVALID_STATE`)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
@@ -1901,6 +1882,145 @@
           }
         }
       }
+    },
+    "/tasks": {
+      "get": {
+        "operationId": "listTasks",
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "List async tasks",
+        "description": "Task history (newest first). Tasks are kept in memory: the list is\nreset when the backend restarts. Terminal tasks (succeeded, failed,\ncancelled) can be listed to audit what happened; use the `status`\nquery filter and `limit` to control the result size.\n",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TaskStatus"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tasks (newest first)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "operationId": "getTask",
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Get a task",
+        "description": "Poll this endpoint to follow a task until it reaches a terminal status.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/tasks/{id}/cancel": {
+      "post": {
+        "operationId": "cancelTask",
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Cancel a task",
+        "description": "Requests cancellation of a queued or running task. The operation\nbehind it is cancelled through its context; the task moves to\n`cancelling` and reaches `cancelled` when the worker returns\n(409 if the task already finished). Tasks that cannot be aborted\nreport `cancellable: false`.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Cancellation requested (returns the task)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Task already reached a terminal state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "security": [
@@ -1919,6 +2039,17 @@
           "type": "string",
           "pattern": "^sch-[a-zA-Z0-9._-]{1,60}$",
           "example": "sch-nightly"
+        }
+      },
+      "TaskId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Task identifier (`task-...`).",
+        "schema": {
+          "type": "string",
+          "pattern": "^task-[a-zA-Z0-9._-]{1,64}$",
+          "example": "task-000001"
         }
       },
       "VMId": {
@@ -2278,7 +2409,7 @@
               "code": {
                 "type": "string",
                 "example": "VM_NOT_FOUND",
-                "description": "Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active \u2014 start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists \u2014 stop the VM first), SCHEDULE_NOT_FOUND, INTERNAL_ERROR.\n"
+                "description": "Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active \u2014 start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists \u2014 stop the VM first), SCHEDULE_NOT_FOUND, TASK_NOT_FOUND, TASK_NOT_CANCELLABLE (the task already reached a terminal state), INTERNAL_ERROR.\n"
               },
               "message": {
                 "type": "string",
@@ -3631,6 +3762,114 @@
               "synic",
               "stimer"
             ]
+          }
+        }
+      },
+      "TaskStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelling",
+          "cancelled"
+        ],
+        "description": "queued: accepted, not started yet. running: worker executing. cancelling: cancel requested, waiting for the worker to return. succeeded/failed/cancelled: terminal states.\n"
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "status",
+          "progress",
+          "cancellable",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "task-000001"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "vm-create",
+              "backup-create",
+              "backup-restore"
+            ],
+            "example": "vm-create"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "resourceId": {
+            "type": "string",
+            "description": "Identifier of the produced resource (VM name, backup point id). Empty while unknown.",
+            "example": "app01"
+          },
+          "resourceName": {
+            "type": "string",
+            "description": "Human-readable target of the task (e.g. the VM name).",
+            "example": "app01"
+          },
+          "message": {
+            "type": "string",
+            "description": "Current step description, when available.",
+            "example": "allocating disk volume"
+          },
+          "error": {
+            "type": "string",
+            "description": "Failure reason when status is failed."
+          },
+          "progress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 40
+          },
+          "warnings": {
+            "type": "array",
+            "description": "Non-fatal notes collected during execution (e.g. profile warnings).",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cancellable": {
+            "type": "boolean",
+            "description": "Whether cancelTask can still be called."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TaskList": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "example": 1
           }
         }
       }

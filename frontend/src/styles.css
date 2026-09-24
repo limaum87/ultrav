@@ -1378,3 +1378,12 @@ tr.row-busy { opacity: 0.55; }
 .live-chart-now { font-size: 20px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .live-chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
 .live-chart-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
+/* --- tasks --- */
+.state-succeeded { color: var(--ok); }
+.state-succeeded .state-dot { background: var(--ok); }
+.state-failed { color: var(--danger); }
+.state-failed .state-dot { background: var(--danger); }
+.state-cancelled { color: var(--text-faint); }
+.state-cancelled .state-dot { background: var(--text-faint); }
+.state-idle { color: var(--text-faint); }

@@ -30,12 +30,13 @@ const navIcon = (Icon: LucideIcon) => <Icon size={16} strokeWidth={1.75} aria-hi
 /* ---------- navigation ---------- */
 
 const nav = [
-  { to: '/', label: 'Dashboard', icon: navIcon(LayoutDashboard), end: true },
+  { to: '/', label: 'Dashboard', icon: navIcon(LayoutDashboard), end: true, soon: false },
   { to: '/vms', label: 'Virtual Machines', icon: navIcon(Monitor), end: false },
   { to: '/storage', label: 'Storage', icon: navIcon(HardDrive), end: false },
   { to: '/network', label: 'Network', icon: navIcon(Network), end: false },
   { to: '/backups', label: 'Backups', icon: navIcon(DatabaseBackup), end: false },
-  { to: '/tasks', label: 'Tasks', icon: navIcon(ListChecks), end: false, soon: true },
+  { to: '/tasks', label: 'Tasks', icon: navIcon(ListChecks), end: false },
+  // `soon?: true` mostra o badge "soon" no item do menu
   { to: '/settings', label: 'Settings', icon: navIcon(Settings), end: false },
 ];
 

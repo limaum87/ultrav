@@ -109,7 +109,7 @@ export function CreateVMWizard({
     setSubmitting(true);
     setError(null);
     try {
-      const created = await unwrap(
+      const task = await unwrap(
         api.POST('/vms', {
           body: {
             name: form.name,
@@ -130,9 +130,10 @@ export function CreateVMWizard({
         }),
       );
       onCreated();
-      for (const w of created?.warnings ?? []) {
-        toast.push('info', w);
-      }
+      toast.push(
+        'success',
+        `Criação de ${form.name} iniciada (task ${task?.id}). Acompanhe o progresso em Tasks.`,
+      );
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? `${e.code}: ${e.message}` : String(e));

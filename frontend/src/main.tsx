@@ -8,8 +8,8 @@ import Dashboard from './pages/Dashboard';
 import VirtualMachines from './pages/VirtualMachines';
 import VMDetails from './pages/VMDetails';
 import ConsoleFullscreen from './pages/ConsoleFullscreen';
-import ComingSoon from './pages/ComingSoon';
 import Backups from './pages/Backups';
+import Tasks from './pages/Tasks';
 import Storage from './pages/Storage';
 import NetworkPage from './pages/Network';
 import Settings from './pages/Settings';
@@ -30,7 +30,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/storage" element={<Storage />} />
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/backups" element={<Backups />} />
-            <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
+            <Route path="/tasks" element={<Tasks />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

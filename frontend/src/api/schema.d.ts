@@ -796,6 +796,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List async tasks
+         * @description Task history (newest first). Tasks are kept in memory: the list is
+         *     reset when the backend restarts. Terminal tasks (succeeded, failed,
+         *     cancelled) can be listed to audit what happened; use the `status`
+         *     query filter and `limit` to control the result size.
+         */
+        get: operations["listTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a task
+         * @description Poll this endpoint to follow a task until it reaches a terminal status.
+         */
+        get: operations["getTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a task
+         * @description Requests cancellation of a queued or running task. The operation
+         *     behind it is cancelled through its context; the task moves to
+         *     `cancelling` and reaches `cancelled` when the worker returns
+         *     (409 if the task already finished). Tasks that cannot be aborted
+         *     report `cancellable: false`.
+         */
+        post: operations["cancelTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -878,7 +945,7 @@ export interface components {
         Error: {
             error: {
                 /**
-                 * @description Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), SCHEDULE_NOT_FOUND, INTERNAL_ERROR.
+                 * @description Stable error identifier. Known values: VM_NOT_FOUND, VM_INVALID_STATE, VM_ALREADY_EXISTS, VALIDATION_ERROR, NOT_FOUND, METHOD_NOT_ALLOWED, STORAGE_POOL_NOT_FOUND, STORAGE_POOL_ALREADY_EXISTS, NETWORK_NOT_FOUND, NETWORK_INVALID_STATE, NETWORK_INACTIVE (a virtual network a VM references is not active — start it before powering on the VM), NETWORK_ALREADY_EXISTS, ISO_NOT_FOUND, ISO_ALREADY_EXISTS, UNAUTHORIZED, INVALID_CREDENTIALS, FORBIDDEN, USER_NOT_FOUND, USER_ALREADY_EXISTS, LAST_ADMIN, CONSOLE_UNAVAILABLE, STORAGE_UNAVAILABLE (the hypervisor cannot open a file the domain references), KVM_UNAVAILABLE (hardware virtualization missing or inaccessible on the host), BACKUP_NOT_FOUND, BACKUP_INVALID_STATE (the backup's VM is running or no longer exists — stop the VM first), SCHEDULE_NOT_FOUND, TASK_NOT_FOUND, TASK_NOT_CANCELLABLE (the task already reached a terminal state), INTERNAL_ERROR.
                  * @example VM_NOT_FOUND
                  */
                 code: string;
@@ -1590,6 +1657,55 @@ export interface components {
              */
             hypervEnlightenments?: string[];
         };
+        /**
+         * @description queued: accepted, not started yet. running: worker executing. cancelling: cancel requested, waiting for the worker to return. succeeded/failed/cancelled: terminal states.
+         * @enum {string}
+         */
+        TaskStatus: "queued" | "running" | "succeeded" | "failed" | "cancelling" | "cancelled";
+        Task: {
+            /** @example task-000001 */
+            id: string;
+            /**
+             * @example vm-create
+             * @enum {string}
+             */
+            type: "vm-create" | "backup-create" | "backup-restore";
+            status: components["schemas"]["TaskStatus"];
+            /**
+             * @description Identifier of the produced resource (VM name, backup point id). Empty while unknown.
+             * @example app01
+             */
+            resourceId?: string;
+            /**
+             * @description Human-readable target of the task (e.g. the VM name).
+             * @example app01
+             */
+            resourceName?: string;
+            /**
+             * @description Current step description, when available.
+             * @example allocating disk volume
+             */
+            message?: string;
+            /** @description Failure reason when status is failed. */
+            error?: string;
+            /** @example 40 */
+            progress: number;
+            /** @description Non-fatal notes collected during execution (e.g. profile warnings). */
+            warnings?: string[];
+            /** @description Whether cancelTask can still be called. */
+            cancellable: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+        };
+        TaskList: {
+            items: components["schemas"]["Task"][];
+            /** @example 1 */
+            total: number;
+        };
     };
     responses: {
         /** @description Virtual machine not found */
@@ -1740,6 +1856,8 @@ export interface components {
     parameters: {
         /** @description Backup schedule identifier (`sch-...`). */
         ScheduleId: string;
+        /** @description Task identifier (`task-...`). */
+        TaskId: string;
         /** @description Virtual machine identifier (name). */
         VMId: string;
         /** @description Resource identifier (libvirt name). */
@@ -2767,26 +2885,23 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Virtual machine created */
-            201: {
+            /**
+             * @description Creation accepted and running in the background as a task
+             *     (volume allocation + domain definition). Poll `GET /tasks/{id}`
+             *     until the status is `succeeded` or `failed`; profile warnings
+             *     (e.g. VirtIO drivers missing for Windows) are reported in the
+             *     task's `warnings[]`.
+             */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VirtualMachine"];
+                    "application/json": components["schemas"]["Task"];
                 };
             };
             /** @description Invalid create specification */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description A virtual machine with this name already exists */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3187,17 +3302,20 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Backup completed */
-            201: {
+            /**
+             * @description Backup accepted and running in the background as a task. Poll
+             *     `GET /tasks/{id}` until the status is `succeeded` or `failed`;
+             *     the finished task's `resourceId` is the backup point id.
+             */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Backup"];
+                    "application/json": components["schemas"]["Task"];
                 };
             };
             404: components["responses"]["VMNotFound"];
-            409: components["responses"]["VMInvalidState"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -3236,25 +3354,21 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Restore completed (returns the restored VM) */
-            200: {
+            /**
+             * @description Restore accepted and running in the background as a task. Poll
+             *     `GET /tasks/{id}` until the status is `succeeded` or `failed`.
+             *     Failure reasons (VM running, backup's VM no longer exists) are
+             *     reported in the task's `error`.
+             */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VirtualMachine"];
+                    "application/json": components["schemas"]["Task"];
                 };
             };
             404: components["responses"]["BackupNotFound"];
-            /** @description VM is running, or no longer exists (code `BACKUP_INVALID_STATE`) */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -3280,6 +3394,106 @@ export interface operations {
                 };
             };
             404: components["responses"]["VMNotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["TaskStatus"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tasks (newest first) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskList"];
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task identifier (`task-...`). */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Task not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    cancelTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Task identifier (`task-...`). */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancellation requested (returns the task) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            /** @description Task not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Task already reached a terminal state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };

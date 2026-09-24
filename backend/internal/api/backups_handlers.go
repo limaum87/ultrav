@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/ultrav/ultrav/backend/internal/api/types"
 	"github.com/ultrav/ultrav/backend/internal/backup"
+	"github.com/ultrav/ultrav/backend/internal/tasks"
 )
 
 // --- backup endpoints ---
@@ -22,8 +24,10 @@ func (s *Server) handleListVMBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, types.BackupList{Items: backups, Total: len(backups)})
 }
 
-// handleCreateVMBackup runs a backup of the VM (synchronous). The body is
-// optional: {"type": "full"|"incremental"} forces the point type; absent = auto.
+// handleCreateVMBackup runs a backup of the VM as a background task
+// (Job System v1). The body is optional: {"type": "full"|"incremental"}
+// forces the point type; absent = auto. The VM must exist (404 otherwise);
+// failures during the copy are reported in the task's error.
 func (s *Server) handleCreateVMBackup(w http.ResponseWriter, r *http.Request) {
 	var req types.BackupCreate
 	if r.Body != nil {
@@ -36,12 +40,29 @@ func (s *Server) handleCreateVMBackup(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, CodeValidationError, "type must be 'full' or 'incremental'")
 		return
 	}
-	backup, err := s.provider.BackupVirtualMachine(r.Context(), r.PathValue("id"), req)
-	if err != nil {
+	vmID := r.PathValue("id")
+	if _, err := s.provider.GetVirtualMachine(r.Context(), vmID); err != nil {
 		s.writeProviderError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, backup)
+	task, err := s.tasks.Start(tasks.TypeBackupCreate, vmID, vmID, func(ctx context.Context, rep *tasks.Reporter) error {
+		rep.SetMessage("backing up " + vmID)
+		rep.SetProgress(10)
+		b, err := s.provider.BackupVirtualMachine(ctx, vmID, req)
+		if err != nil {
+			return err
+		}
+		rep.SetResourceID(b.Id)
+		rep.SetProgress(100)
+		rep.SetMessage("backup of " + vmID + " completed")
+		return nil
+	})
+	if err != nil {
+		s.log.Error("failed to start backup-create task", "err", err)
+		s.writeError(w, r, CodeInternalError, "")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, task)
 }
 
 // requireValidBackupID guards the /backups/{id} path parameter.
@@ -64,14 +85,28 @@ func (s *Server) handleDeleteBackup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRestoreBackup restores a backup into its (stopped) VM.
+// handleRestoreBackup restores a backup into its (stopped) VM as a
+// background task (Job System v1); poll GET /tasks/{id} for the result.
 func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
-	vm, err := s.provider.RestoreBackup(r.Context(), r.PathValue("id"))
+	id := r.PathValue("id")
+	task, err := s.tasks.Start(tasks.TypeBackupRestore, id, id, func(ctx context.Context, rep *tasks.Reporter) error {
+		rep.SetMessage("restoring backup " + id)
+		rep.SetProgress(10)
+		vm, err := s.provider.RestoreBackup(ctx, id)
+		if err != nil {
+			return err
+		}
+		rep.SetResourceID(vm.Id)
+		rep.SetProgress(100)
+		rep.SetMessage("restore of " + id + " completed")
+		return nil
+	})
 	if err != nil {
-		s.writeProviderError(w, r, err)
+		s.log.Error("failed to start backup-restore task", "err", err)
+		s.writeError(w, r, CodeInternalError, "")
 		return
 	}
-	writeJSON(w, http.StatusOK, vm)
+	writeJSON(w, http.StatusAccepted, task)
 }
 
 // handleExportVMConfig returns the domain XML (application/xml).

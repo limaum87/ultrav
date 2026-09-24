@@ -22,6 +22,7 @@ import (
 	"github.com/ultrav/ultrav/backend/internal/iso"
 	"github.com/ultrav/ultrav/backend/internal/scheduler"
 	"github.com/ultrav/ultrav/backend/internal/settings"
+	"github.com/ultrav/ultrav/backend/internal/tasks"
 )
 
 //go:embed openapi.json
@@ -31,7 +32,8 @@ var openapiJSON embed.FS
 type Server struct {
 	provider hypervisor.Provider
 	isos     *iso.Store
-	authn    *auth.Service // nil disables authentication (tests)
+	tasks    *tasks.Manager
+	authn    *auth.Service      // nil disables authentication (tests)
 	settings *settings.Store    // nil disables persistence of runtime settings
 	sched    *scheduler.Service // nil disables backup schedule endpoints
 	log      *slog.Logger
@@ -42,7 +44,7 @@ type Server struct {
 // bearer tokens on protected endpoints and a non-nil settings store to
 // persist runtime settings (e.g. the ISO library directory override).
 func NewServer(provider hypervisor.Provider, isos *iso.Store, authn *auth.Service, st *settings.Store, sched *scheduler.Service, log *slog.Logger) *Server {
-	s := &Server{provider: provider, isos: isos, authn: authn, settings: st, sched: sched, log: log, router: http.NewServeMux()}
+	s := &Server{provider: provider, isos: isos, tasks: tasks.NewManager(log), authn: authn, settings: st, sched: sched, log: log, router: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -118,6 +120,11 @@ func (s *Server) routes() {
 	mux.HandleFunc("DELETE /api/v1/networks/{id}", s.requireValidVMID(s.handleDeleteNetwork))
 	mux.HandleFunc("GET /api/v1/host/bridges", s.handleListHostBridges)
 
+	// Tasks (async job system)
+	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
+	mux.HandleFunc("GET /api/v1/tasks/{id}", s.requireValidTaskID(s.handleGetTask))
+	mux.HandleFunc("POST /api/v1/tasks/{id}/cancel", s.requireValidTaskID(s.handleCancelTask))
+
 	// Contract & docs
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 	mux.HandleFunc("GET /docs", s.handleDocs)
@@ -189,7 +196,8 @@ func (s *Server) handleGetVM(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, vm)
 }
 
-// handleCreateVM validates and creates a new virtual machine.
+// handleCreateVM validates the request and starts the creation as a
+// background task (Job System v1): the caller polls GET /tasks/{id}.
 func (s *Server) handleCreateVM(w http.ResponseWriter, r *http.Request) {
 	var req types.VirtualMachineCreate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -200,12 +208,28 @@ func (s *Server) handleCreateVM(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, r, CodeValidationError, msg)
 		return
 	}
-	vm, err := s.provider.CreateVirtualMachine(r.Context(), req)
+	task, err := s.tasks.Start(tasks.TypeVMCreate, req.Name, req.Name, func(ctx context.Context, rep *tasks.Reporter) error {
+		rep.SetMessage("creating virtual machine " + req.Name)
+		vm, err := s.provider.CreateVirtualMachine(ctx, req)
+		if err != nil {
+			return err
+		}
+		rep.SetResourceID(vm.Id)
+		rep.SetProgress(100)
+		rep.SetMessage("virtual machine " + req.Name + " created")
+		if vm.Warnings != nil {
+			for _, w := range *vm.Warnings {
+				rep.AddWarning(w)
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		s.writeProviderError(w, r, err)
+		s.log.Error("failed to start vm-create task", "err", err)
+		s.writeError(w, r, CodeInternalError, "")
 		return
 	}
-	writeJSON(w, http.StatusCreated, vm)
+	writeJSON(w, http.StatusAccepted, task)
 }
 
 // validateCreateVM enforces the contract constraints not covered by the
@@ -379,7 +403,7 @@ func validateCreateStoragePool(req *types.StoragePoolCreate) string {
 	return ""
 }
 
-	// handleDeleteStoragePool removes a pool from the listing (undefine only).
+// handleDeleteStoragePool removes a pool from the listing (undefine only).
 // Volumes, disk images and files on disk are never deleted.
 func (s *Server) handleDeleteStoragePool(w http.ResponseWriter, r *http.Request) {
 	if err := s.provider.DeleteStoragePool(r.Context(), r.PathValue("id")); err != nil {

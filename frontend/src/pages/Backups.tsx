@@ -66,14 +66,14 @@ export default function Backups() {
   const createBackup = useCallback(
     (vmId: string, type: 'auto' | 'full' | 'incremental') =>
       run(`backup-${vmId}`, async () => {
-        // Synchronous: the call returns when the copy completes.
-        await unwrap(
+        // Assíncrono: 202 com a task; acompanhe em Tasks.
+        const task = await unwrap(
           api.POST('/vms/{id}/backups', {
             params: { path: { id: vmId } },
             body: type === 'auto' ? {} : { type },
           }),
         );
-        return `Backup ${type === 'auto' ? '' : `(${type}) `}de ${vmId} concluído`;
+        return `Backup ${type === 'auto' ? '' : `(${type}) `}de ${vmId} iniciado (task ${task?.id})`;
       }),
     [run],
   );
@@ -81,9 +81,8 @@ export default function Backups() {
   const restore = useCallback(
     (b: Backup) =>
       run(`restore-${b.id}`, async () => {
-        const vm = await unwrap(api.POST('/backups/{id}/restore', { params: { path: { id: b.id } } }));
-        void vm;
-        return `Restore de ${b.vmId} concluído (ponto ${b.id})`;
+        const task = await unwrap(api.POST('/backups/{id}/restore', { params: { path: { id: b.id } } }));
+        return `Restore de ${b.vmId} iniciado (ponto ${b.id}, task ${task?.id})`;
       }),
     [run],
   );

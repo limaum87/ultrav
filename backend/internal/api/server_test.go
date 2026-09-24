@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ultrav/ultrav/backend/internal/hypervisor/mock"
 )
@@ -185,6 +186,37 @@ func postJSON(t *testing.T, s *Server, path string, payload string) (*http.Respo
 	return res, body
 }
 
+// waitTask polls GET /tasks/{id} until the task reaches a terminal status
+// and returns the final body.
+func waitTask(t *testing.T, s *Server, id string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_, body := get(t, s, "/api/v1/tasks/"+id)
+		switch body["status"] {
+		case "succeeded", "failed", "cancelled":
+			return body
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("task %s did not finish in time", id)
+	return nil
+}
+
+// startTask posts and asserts 202, returning the task id.
+func startTask(t *testing.T, s *Server, method, path string) string {
+	t.Helper()
+	res, body := do(t, s, method, path)
+	if res.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202 for %s %s, got %d: %v", method, path, res.StatusCode, body)
+	}
+	id, _ := body["id"].(string)
+	if id == "" {
+		t.Fatalf("task id missing: %v", body)
+	}
+	return id
+}
+
 func TestCreateVM(t *testing.T) {
 	s := testServer(t)
 
@@ -196,20 +228,80 @@ func TestCreateVM(t *testing.T) {
 		t.Fatalf("expected 400 VALIDATION_ERROR, got %d %v", res.StatusCode, body)
 	}
 
-	// create -> 201, stopped, visible in list
+	// create -> 202 task; when the task succeeds the VM exists, stopped
 	res, body = postJSON(t, s, "/api/v1/vms", valid)
-	if res.StatusCode != 201 || body["id"] != "app01" || body["state"] != "stopped" {
+	if res.StatusCode != 202 || body["type"] != "vm-create" || body["status"] == "succeeded" {
 		t.Fatalf("create: %d %v", res.StatusCode, body)
 	}
+	taskID, _ := body["id"].(string)
+	task := waitTask(t, s, taskID)
+	if task["status"] != "succeeded" {
+		t.Fatalf("vm-create task failed: %v", task)
+	}
 	_, body = get(t, s, "/api/v1/vms/app01")
-	if body["id"] != "app01" {
-		t.Fatalf("created VM not listed")
+	if body["id"] != "app01" || body["state"] != "stopped" {
+		t.Fatalf("created VM not listed: %v", body)
 	}
 
-	// duplicate -> 409 VM_ALREADY_EXISTS
+	// duplicate -> 202 task that fails with VM_ALREADY_EXISTS
 	res, body = postJSON(t, s, "/api/v1/vms", valid)
-	if res.StatusCode != 409 || body["error"].(map[string]any)["code"] != "VM_ALREADY_EXISTS" {
-		t.Fatalf("expected 409 VM_ALREADY_EXISTS, got %d %v", res.StatusCode, body)
+	if res.StatusCode != 202 {
+		t.Fatalf("expected 202 for duplicate create, got %d %v", res.StatusCode, body)
+	}
+	task = waitTask(t, s, body["id"].(string))
+	if task["status"] != "failed" || !strings.Contains(task["error"].(string), "already exists") {
+		t.Fatalf("expected failed duplicate task, got %v", task)
+	}
+}
+
+func TestTasksEndpoints(t *testing.T) {
+	s := testServer(t)
+
+	// Unknown task -> 404 TASK_NOT_FOUND.
+	res, body := get(t, s, "/api/v1/tasks/task-999999")
+	if res.StatusCode != 404 || body["error"].(map[string]any)["code"] != "TASK_NOT_FOUND" {
+		t.Fatalf("unknown task: %d %v", res.StatusCode, body)
+	}
+
+	// Invalid id -> 400.
+	if res, _ = get(t, s, "/api/v1/tasks/nope"); res.StatusCode != 400 {
+		t.Fatalf("invalid task id: %d", res.StatusCode)
+	}
+
+	// Create a VM asynchronously and follow it through /tasks.
+	res, body = postJSON(t, s, "/api/v1/vms", `{"name":"ultrav-tasks-vm","vcpus":1,"memoryBytes":16777216,"disk":{"poolId":"default","sizeBytes":1048576},"networkId":"default","start":false}`)
+	if res.StatusCode != 202 {
+		t.Fatalf("create: %d %v", res.StatusCode, body)
+	}
+	id := body["id"].(string)
+	_ = waitTask(t, s, id)
+
+	// getTask returns the finished task.
+	res, body = get(t, s, "/api/v1/tasks/"+id)
+	if res.StatusCode != 200 || body["status"] != "succeeded" || body["resourceId"] != "ultrav-tasks-vm" {
+		t.Fatalf("getTask: %d %v", res.StatusCode, body)
+	}
+
+	// listTasks shows it; cancel of a terminal task -> 409.
+	res, body = get(t, s, "/api/v1/tasks")
+	if res.StatusCode != 200 || body["total"].(float64) < 1 {
+		t.Fatalf("listTasks: %d %v", res.StatusCode, body)
+	}
+	res, body = do(t, s, http.MethodPost, "/api/v1/tasks/"+id+"/cancel")
+	if res.StatusCode != 409 || body["error"].(map[string]any)["code"] != "TASK_NOT_CANCELLABLE" {
+		t.Fatalf("cancel terminal task: %d %v", res.StatusCode, body)
+	}
+
+	// status filter validation.
+	if res, _ = get(t, s, "/api/v1/tasks?status=bogus"); res.StatusCode != 400 {
+		t.Fatalf("bad status filter: %d", res.StatusCode)
+	}
+	if res, _ = get(t, s, "/api/v1/tasks?limit=0"); res.StatusCode != 400 {
+		t.Fatalf("bad limit: %d", res.StatusCode)
+	}
+	res, body = get(t, s, "/api/v1/tasks?status=failed")
+	if res.StatusCode != 200 || body["total"].(float64) != 0 {
+		t.Fatalf("status filter failed: %d %v", res.StatusCode, body)
 	}
 }
 
