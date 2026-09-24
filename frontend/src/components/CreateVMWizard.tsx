@@ -132,7 +132,7 @@ export function CreateVMWizard({
       onCreated();
       toast.push(
         'success',
-        `Criação de ${form.name} iniciada (task ${task?.id}). Acompanhe o progresso em Tasks.`,
+        `Creation of ${form.name} started (task ${task?.id}). Follow the progress in Tasks.`,
       );
       onClose();
     } catch (e) {

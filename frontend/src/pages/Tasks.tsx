@@ -8,7 +8,7 @@ import { useToast } from '../components/Toast';
 type StatusFilter = '' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 const TYPE_LABEL: Record<string, string> = {
-  'vm-create': 'Criação de VM',
+  'vm-create': 'VM creation',
   'backup-create': 'Backup',
   'backup-restore': 'Restore',
 };
@@ -17,7 +17,7 @@ function StatusBadge({ status }: { status: Task['status'] }) {
   return (
     <span className={`state state-${status === 'cancelling' ? 'shutting-down' : status === 'queued' ? 'idle' : status}`}>
       <span className="state-dot" />
-      {status === 'cancelling' ? 'cancelando' : status}
+      {status === 'cancelling' ? 'cancelling' : status}
     </span>
   );
 }
@@ -41,7 +41,7 @@ export default function Tasks() {
     setCancelling(id);
     try {
       await unwrap(api.POST('/tasks/{id}/cancel', { params: { path: { id } } }));
-      toast.push('info', `Cancelamento da task ${id} solicitado`);
+      toast.push('info', `Cancellation of task ${id} requested`);
     } catch (e) {
       toast.push('error', e instanceof ApiError ? `${e.code} — ${e.message}` : String(e));
     } finally {
@@ -55,7 +55,7 @@ export default function Tasks() {
       <header className="page-head">
         <div>
           <h1>Tasks</h1>
-          <p className="subtitle">Operações assíncronas (criação de VMs, backups, restores) e seu histórico</p>
+          <p className="subtitle">Async operations (VM creation, backups, restores) and their history</p>
         </div>
         <select
           value={filter}
@@ -63,7 +63,7 @@ export default function Tasks() {
           aria-label="Filter by status"
           style={{ minWidth: 160 }}
         >
-          <option value="">Todos os status</option>
+          <option value="">All statuses</option>
           <option value="queued">queued</option>
           <option value="running">running</option>
           <option value="succeeded">succeeded</option>
@@ -74,16 +74,16 @@ export default function Tasks() {
 
       <section className="metric-grid">
         <MetricCard
-          label="Ativas"
+          label="Active"
           value={active}
           hint="queued + running"
           loading={tasks.loading}
           icon={<ListChecks size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
         />
         <MetricCard
-          label="Falhas"
+          label="Failures"
           value={failed}
-          hint="no histórico atual"
+          hint="in the current history"
           loading={tasks.loading}
           tone={failed > 0 ? 'danger' : undefined}
           icon={<XCircle size={24} className="ic ic-blue" strokeWidth={1.75} aria-hidden />}
@@ -92,11 +92,11 @@ export default function Tasks() {
 
       <div className="card" style={{ padding: 0 }}>
         {tasks.loading ? (
-          <EmptyState title="Carregando…" message="Buscando tasks" />
+          <EmptyState title="Loading…" message="Fetching tasks" />
         ) : items.length === 0 ? (
           <EmptyState
-            title="Nenhuma task"
-            message="Crie uma VM ou execute um backup: a operação aparece aqui em tempo real."
+            title="No tasks"
+            message="Create a VM or run a backup: the operation shows up here in real time."
           />
         ) : (
           <div className="table-card">
@@ -104,12 +104,12 @@ export default function Tasks() {
               <thead>
                 <tr>
                   <th>Task</th>
-                  <th>Tipo</th>
-                  <th>Recurso</th>
+                  <th>Type</th>
+                  <th>Resource</th>
                   <th>Status</th>
-                  <th>Progresso</th>
-                  <th>Início</th>
-                  <th>Fim</th>
+                  <th>Progress</th>
+                  <th>Started</th>
+                  <th>Finished</th>
                   <th aria-label="Ações" />
                 </tr>
               </thead>
@@ -149,7 +149,7 @@ export default function Tasks() {
                       <td>
                         {t.cancellable && (
                           <button className="btn btn-sm" disabled={cancelling === t.id} onClick={() => void cancel(t.id)}>
-                            {cancelling === t.id ? 'Cancelando…' : 'Cancelar'}
+                            {cancelling === t.id ? 'Cancelling…' : 'Cancel'}
                           </button>
                         )}
                       </td>

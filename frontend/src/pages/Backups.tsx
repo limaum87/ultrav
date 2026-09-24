@@ -66,14 +66,14 @@ export default function Backups() {
   const createBackup = useCallback(
     (vmId: string, type: 'auto' | 'full' | 'incremental') =>
       run(`backup-${vmId}`, async () => {
-        // Assíncrono: 202 com a task; acompanhe em Tasks.
+        // Async: 202 with the task; follow it in Tasks.
         const task = await unwrap(
           api.POST('/vms/{id}/backups', {
             params: { path: { id: vmId } },
             body: type === 'auto' ? {} : { type },
           }),
         );
-        return `Backup ${type === 'auto' ? '' : `(${type}) `}de ${vmId} iniciado (task ${task?.id})`;
+        return `Backup ${type === 'auto' ? '' : `(${type}) `}of ${vmId} started (task ${task?.id})`;
       }),
     [run],
   );
@@ -82,7 +82,7 @@ export default function Backups() {
     (b: Backup) =>
       run(`restore-${b.id}`, async () => {
         const task = await unwrap(api.POST('/backups/{id}/restore', { params: { path: { id: b.id } } }));
-        return `Restore de ${b.vmId} iniciado (ponto ${b.id}, task ${task?.id})`;
+        return `Restore of ${b.vmId} started (point ${b.id}, task ${task?.id})`;
       }),
     [run],
   );
@@ -113,7 +113,7 @@ export default function Backups() {
       <header className="page-head">
         <div>
           <h1>Backups</h1>
-          <p className="subtitle">Pontos de restauração por VM e agendamentos com retenção</p>
+          <p className="subtitle">Restore points per VM and schedules with retention</p>
         </div>
         {tab === 'points' ? (
           <div className="btn-row">
@@ -171,7 +171,7 @@ export default function Backups() {
             <MetricCard
               label="Stored"
               value={formatBytes(totalSize, 1)}
-              hint="imagens no diretório de backups"
+              hint="images in the backup directory"
               loading={points.loading}
               icon={<HardDrive size={24} className="ic ic-purple" strokeWidth={1.75} aria-hidden />}
             />
@@ -181,11 +181,11 @@ export default function Backups() {
             {points.loading ? (
               <TableSkeleton rows={3} cols={6} />
             ) : !activeVM ? (
-              <EmptyState title="Nenhuma VM" message="Crie uma VM para começar a fazer backups." />
+              <EmptyState title="No VMs" message="Create a VM to start taking backups." />
             ) : backups.length === 0 ? (
               <EmptyState
                 title={`Sem backups de ${activeVM}`}
-                message="Use “Backup Now” ou crie um schedule — a primeira execução sempre tira um full."
+                message="Use “Backup Now” or create a schedule — the first run always takes a full."
               />
             ) : (
               <table className="table">
@@ -250,7 +250,7 @@ export default function Backups() {
           ) : (schedules.data?.items ?? []).length === 0 ? (
             <EmptyState
               title="Nenhum agendamento"
-              message="Crie um schedule para rodar backups diários com retenção automática."
+              message="Create a schedule to run daily backups with automatic retention."
             />
           ) : (
             <table className="table">
@@ -291,7 +291,7 @@ export default function Backups() {
                       danger: true,
                       onSelect: () => setToDelete({ kind: 'schedule', id: sch.id, label: sch.name }),
                       disabled: busy !== null,
-                      title: 'Remove apenas a definição; pontos de backup são mantidos',
+                      title: 'Removes the definition only; backup points are kept',
                     },
                   ];
                   return (
@@ -332,9 +332,9 @@ export default function Backups() {
         title={`Restore ${toRestore?.id ?? ''}?`}
         message={
           <>
-            Os discos de <strong>{toRestore?.vmId}</strong> serão <strong>sobrescritos</strong> com o conteúdo
+            The disks of <strong>{toRestore?.vmId}</strong> will be <strong>overwritten</strong> with the contents
             deste ponto (full {toRestore?.parentId ? '+ incrementais da cadeia' : ''}). A VM precisa estar
-            <strong> parada</strong>. O conteúdo atual dos discos será perdido.
+            <strong> stopped</strong>. The current disk contents will be lost.
           </>
         }
         confirmLabel="Restore Now"
@@ -352,8 +352,8 @@ export default function Backups() {
         title={toDelete?.kind === 'backup' ? `Delete backup ${toDelete?.id}?` : `Delete schedule “${toDelete?.label}”?`}
         message={
           toDelete?.kind === 'backup'
-            ? 'As imagens deste ponto são removidas permanentemente do diretório de backups. Se ele for o pai de incrementais, a cadeia deles fica quebrada.'
-            : 'Apenas a definição do agendamento é removida; pontos de backup existentes são mantidos.'
+            ? 'This point\'s images are permanently removed from the backup directory. If it is the parent of incrementals, their chain becomes broken.'
+            : 'Only the schedule definition is removed; existing backup points are kept.'
         }
         confirmLabel="Delete"
         busy={busy !== null}
