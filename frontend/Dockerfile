@@ -17,8 +17,13 @@ COPY --from=build /src/dist /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 # noVNC requires a secure context: serve TLS with a self-signed certificate
 # generated at build time (single-host internal deployment).
+# ULTRAV_HOST_IP is the address the UI is reached at; without it in the SAN the
+# browser rejects https://<host-ip>:8275 with a name mismatch (the compose file
+# passes it from deploy/.env).
+ARG ULTRAV_HOST_IP=127.0.0.1
 RUN apk add --no-cache openssl && mkdir -p /etc/nginx/certs && \
     openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
       -keyout /etc/nginx/certs/tls.key -out /etc/nginx/certs/tls.crt \
-      -subj "/CN=ultrav" -addext "subjectAltName=DNS:ultrav,IP:192.168.8.69"
+      -subj "/CN=ultrav" \
+      -addext "subjectAltName=DNS:ultrav,DNS:localhost,IP:127.0.0.1,IP:${ULTRAV_HOST_IP}"
 EXPOSE 80 443

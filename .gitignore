@@ -13,6 +13,8 @@ coverage.out
 
 # Ambiente / local
 .env
+deploy/.env
+deploy/.env.local
 *.local
 deploy/docker-compose.override.yml
 

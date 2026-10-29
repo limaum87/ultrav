@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	libvirt "libvirt.org/go/libvirt"
 
@@ -73,16 +75,20 @@ func (p *Provider) UpdateVirtualMachine(_ context.Context, id string, req types.
 
 		if req.IsoId != nil {
 			isoID := *req.IsoId
+			// The CD-ROM source in the domain XML must be the absolute path on
+			// the host: qemu opens it in the host namespace, so a bare filename
+			// makes the domain unbootable (STORAGE_UNAVAILABLE on start).
+			path := ""
 			if isoID != "" {
 				if !iso.ValidID.MatchString(isoID) {
 					return fmt.Errorf("%w: invalid ISO filename", os.ErrInvalid)
 				}
-				path := filepath.Join(p.isoDir(), isoID)
+				path = filepath.Join(p.isoDir(), isoID)
 				if _, err := os.Stat(path); err != nil {
 					return hypervisor.ErrIsoNotFound
 				}
 			}
-			if err := setCDROM(dom, isoID); err != nil {
+			if err := setCDROM(c, dom, path); err != nil {
 				return err
 			}
 		}
@@ -140,9 +146,9 @@ func setNICNetwork(dom *libvirt.Domain, network string) error {
 
 // setCDROM attaches, swaps or detaches the domain's CD-ROM in the persistent
 // config. isoPath == "" detaches. Device changes only affect the next boot.
-func setCDROM(dom *libvirt.Domain, isoPath string) error {
-	// Resolve the current CD-ROM target (e.g. sda) so detach/swap reuses it.
-	curDev, err := currentCDROMDev(dom)
+func setCDROM(c *libvirt.Connect, dom *libvirt.Domain, isoPath string) error {
+	// Resolve the existing CD-ROM (dev + bus) so detach/swap reuse it.
+	curDev, curBus, err := currentCDROM(dom)
 	if err != nil {
 		return err
 	}
@@ -151,57 +157,156 @@ func setCDROM(dom *libvirt.Domain, isoPath string) error {
 		if curDev == "" {
 			return
 		}
-		xml := cdromXML(curDev, "")
+		xml := cdromXML(curDev, curBus, "", false)
 		_ = dom.DetachDeviceFlags(xml, libvirt.DomainDeviceModifyFlags(libvirt.DOMAIN_AFFECT_CONFIG))
 	}
 
 	switch {
 	case isoPath == "":
 		detach()
-		return nil
+		return setOSBootOrder(c, dom, false)
 	case curDev != "":
 		detach()
 	}
 
-	xml := cdromXML(cdromTarget, isoPath)
+	dev, bus, err := nextCDROMTarget(dom)
+	if err != nil {
+		return err
+	}
+	// A domain defined without install media gets <os><boot dev='hd'/></os> from
+	// libvirt, and libvirt rejects per-device boot order in that case. Use the
+	// per-device form (what provisioning emits) only when there is none.
+	osBoot, err := hasOSBootOrder(dom)
+	if err != nil {
+		return err
+	}
+	xml := cdromXML(dev, bus, isoPath, !osBoot)
 	if err := dom.AttachDeviceFlags(xml, libvirt.DomainDeviceModifyFlags(libvirt.DOMAIN_AFFECT_CONFIG)); err != nil {
 		return fmt.Errorf("attach cdrom: %w", asStorageUnavailable(err))
 	}
+	// Put the install media ahead of the (possibly empty) system disk, otherwise
+	// the guest stops at "No bootable device".
+	return setOSBootOrder(c, dom, true)
+}
+
+var (
+	osBlockRe  = regexp.MustCompile(`(?s)<os>.*?</os>`)
+	osBootElRe = regexp.MustCompile(`\s*<boot[^>]*/>`)
+)
+
+// hasOSBootOrder reports whether the domain uses the domain-level boot order
+// (<os><boot dev='...'/></os>) instead of per-device <boot order='N'/>.
+func hasOSBootOrder(dom *libvirt.Domain) (bool, error) {
+	xmlStr, err := dom.GetXMLDesc(libvirt.DOMAIN_XML_INACTIVE)
+	if err != nil {
+		return false, fmt.Errorf("read domain xml: %w", err)
+	}
+	return strings.Contains(xmlStr, "<boot dev="), nil
+}
+
+// setOSBootOrder rewrites the domain-level boot order: cdromFirst boots the
+// CD-ROM before the hard disk. No-op for domains using per-device boot order.
+func setOSBootOrder(c *libvirt.Connect, dom *libvirt.Domain, cdromFirst bool) error {
+	xmlStr, err := dom.GetXMLDesc(libvirt.DOMAIN_XML_INACTIVE)
+	if err != nil {
+		return fmt.Errorf("read domain xml: %w", err)
+	}
+	if !strings.Contains(xmlStr, "<boot dev=") {
+		return nil
+	}
+	boot := "<boot dev='hd'/>"
+	if cdromFirst {
+		boot = "<boot dev='cdrom'/><boot dev='hd'/>"
+	}
+	out := osBlockRe.ReplaceAllStringFunc(xmlStr, func(block string) string {
+		body := osBootElRe.ReplaceAllString(block, "")
+		return strings.Replace(body, "<os>", "<os>"+boot, 1)
+	})
+	if out == xmlStr {
+		return nil
+	}
+	nd, err := c.DomainDefineXML(out)
+	if err != nil {
+		return fmt.Errorf("update boot order: %w", err)
+	}
+	nd.Free()
 	return nil
 }
 
-// cdromTarget is the fixed target device used for newly attached CD-ROMs,
-// matching the sata CD-ROM created at VM provisioning time.
-const cdromTarget = "sda"
+// nextCDROMTarget picks a free target device name and a bus for a new CD-ROM.
+//
+// The target name cannot be a constant: device names are unique across buses
+// (they all surface as sdX in the guest), so a VM created without install media
+// already owns sda for its system disk — attaching a CD-ROM as sda fails with
+// "target sda already exists". The bus follows the system disk when it is a
+// legacy one: a guest with an IDE/SATA controller (e.g. a converted Windows XP
+// image) cannot see a CD-ROM on a bus the domain does not have.
+func nextCDROMTarget(dom *libvirt.Domain) (dev, bus string, err error) {
+	inactive, err := dom.GetXMLDesc(libvirt.DOMAIN_XML_INACTIVE)
+	if err != nil {
+		return "", "", fmt.Errorf("read domain xml: %w", err)
+	}
+	var dx domainXML
+	if err := xml.Unmarshal([]byte(inactive), &dx); err != nil {
+		return "", "", fmt.Errorf("parse domain xml: %w", err)
+	}
+
+	used := make(map[string]bool, len(dx.Disks))
+	bus = "sata"
+	systemBus := ""
+	for _, d := range dx.Disks {
+		if d.Target.Dev != "" {
+			used[d.Target.Dev] = true
+		}
+		if d.Device != "cdrom" && systemBus == "" {
+			systemBus = d.Target.Bus
+		}
+	}
+	if systemBus == "ide" || systemBus == "sata" {
+		bus = systemBus
+	}
+
+	for c := 'a'; c <= 'z'; c++ {
+		candidate := "sd" + string(c)
+		if !used[candidate] {
+			return candidate, bus, nil
+		}
+	}
+	return "", "", fmt.Errorf("no free target device name for a cdrom")
+}
 
 // cdromXML renders the CD-ROM device XML used by attach/detach operations.
-func cdromXML(dev, isoPath string) string {
-	source := ""
+// withBoot adds the per-device boot order used by the provisioning path.
+func cdromXML(dev, bus, isoPath string, withBoot bool) string {
+	source, boot := "", ""
 	if isoPath != "" {
 		source = fmt.Sprintf("\n      <source file='%s'/>", xmlEscape(isoPath))
+		if withBoot {
+			boot = "\n      <boot order='1'/>"
+		}
 	}
 	return fmt.Sprintf(`<disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
-      <target dev='%s' bus='sata'/>%s
-      <readonly/>
-    </disk>`, xmlEscape(dev), source)
+      <target dev='%s' bus='%s'/>%s
+      <readonly/>%s
+    </disk>`, xmlEscape(dev), xmlEscape(bus), source, boot)
 }
 
-// currentCDROMDev returns the target device of the domain's existing CD-ROM
-// (from the persistent config), or "" when it has none.
-func currentCDROMDev(dom *libvirt.Domain) (string, error) {
+// currentCDROM returns the target device and bus of the domain's existing
+// CD-ROM (from the persistent config), or "" when it has none.
+func currentCDROM(dom *libvirt.Domain) (dev, bus string, err error) {
 	xmlStr, err := dom.GetXMLDesc(libvirt.DOMAIN_XML_INACTIVE)
 	if err != nil {
-		return "", fmt.Errorf("read domain xml: %w", err)
+		return "", "", fmt.Errorf("read domain xml: %w", err)
 	}
 	var dx domainXML
 	if err := xml.Unmarshal([]byte(xmlStr), &dx); err != nil {
-		return "", fmt.Errorf("parse domain xml: %w", err)
+		return "", "", fmt.Errorf("parse domain xml: %w", err)
 	}
 	for _, d := range dx.Disks {
 		if d.Device == "cdrom" {
-			return d.Target.Dev, nil
+			return d.Target.Dev, d.Target.Bus, nil
 		}
 	}
-	return "", nil
+	return "", "", nil
 }

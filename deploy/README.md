@@ -1,18 +1,23 @@
 # Deploy — Docker Compose
 
-Sobe a aplicação completa com o `MockHypervisorProvider` — nenhum host KVM é necessário.
+Sobe a aplicação completa **em modo libvirt**, contra o daemon do host. Para
+demonstração sem KVM, use `HYPERVISOR_PROVIDER=mock` no `deploy/.env`.
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+cp deploy/.env.example deploy/.env
+# preencha LIBVIRT_GID e KVM_GID (getent group libvirt kvm), ULTRAV_HOST_IP
+# e ULTRAV_JWT_SECRET (openssl rand -hex 32)
+docker compose -f deploy/docker-compose.yml up -d --build
 
-# UI:      http://localhost:8275
-# Swagger: http://localhost:8275/docs
-# API:     http://localhost:8275/api/v1/...
+# UI:      https://localhost:8275   (certificado autoassinado)
+# Swagger: https://localhost:8275/docs
+# API:     https://localhost:8275/api/v1/...
 ```
 
 ## Como funciona
 
-- **Porta única (8275).** O container `frontend` (nginx) serve a SPA e faz proxy de `/api`, `/openapi.json` e `/docs` para o `backend:8080`. Sem CORS no deploy.
+- **Porta única (8275 → 443).** O container `frontend` (nginx) serve a SPA em **HTTPS** (noVNC exige contexto seguro) e faz proxy de `/api`, `/openapi.json` e `/docs` para o `backend:8080`. Sem CORS no deploy. O SAN do certificado é gerado a partir de `ULTRAV_HOST_IP`.
+- **Parâmetros de host em `deploy/.env`**: GIDs para `group_add`, IP do certificado e segredo JWT são obrigatórios — sem eles o Compose aborta com mensagem explícita (`defina LIBVIRT_GID em deploy/.env`) em vez de subir com valor errado.
 - **Backend**: build multi-stage (`backend/Dockerfile`); o estágio `test` roda `go test ./...` durante o build. Runtime alpine, usuário não-root, healthcheck em `/api/v1/health`.
 - **Frontend**: build multi-stage (`frontend/Dockerfile`); o client TypeScript é **regenerado a partir de `docs/api/openapi.yaml`** dentro do build — a UI nunca diverge do contrato.
 - **Healthcheck do compose** usa `GET /api/v1/health`; o frontend só inicia com o backend healthy.
@@ -35,7 +40,7 @@ O frontend continua sendo só o `deploy/docker-compose.yml` (serviço `frontend`
 
 ### Biblioteca de ISOs com backend em container
 
-O backend grava o caminho do ISO no XML do domínio, mas quem abre o arquivo é o **qemu, no host**. Por isso, em modo libvirt o diretório de ISOs precisa ser um bind mount de **caminho idêntico** nos dois lados — um volume nomeado (o default do compose) faz o upload funcionar e a VM falhar só no start, com `Cannot access storage file`:
+O backend grava o caminho do ISO no XML do domínio, mas quem abre o arquivo é o **qemu, no host**. Por isso, em modo libvirt o diretório de ISOs precisa ser um bind mount de **caminho idêntico** nos dois lados — um volume nomeado faz o upload funcionar e a VM falhar só no start, com `Cannot access storage file`. O compose já monta ISOs, imagens de disco e backups dessa forma; se você mudar esses mounts, mantenha a regra:
 
 ```yaml
 services:

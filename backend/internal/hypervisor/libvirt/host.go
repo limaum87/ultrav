@@ -148,8 +148,11 @@ func (p *Provider) GetCapabilities(_ context.Context) (types.Capabilities, error
 		if err != nil {
 			return err
 		}
-		kvm := strings.Contains(xml, "<domain type='kvm'>") ||
-			strings.Contains(xml, "<domain type=\"kvm\">")
+		// libvirt emits the supported domain types as self-closing elements,
+		// e.g. <domain type='kvm'/> — matching on "<domain type='kvm'>" (with a
+		// closing '>') reports kvm=false on every real host.
+		kvm := strings.Contains(xml, "type='kvm'") ||
+			strings.Contains(xml, "type=\"kvm\"")
 		uefi := strings.Contains(xml, "<loader") || strings.Contains(xml, "OVMF")
 		caps = types.Capabilities{
 			Virtualization: types.CapabilitiesVirtualization{Kvm: kvm, Uefi: uefi},

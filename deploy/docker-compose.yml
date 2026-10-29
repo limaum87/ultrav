@@ -4,24 +4,26 @@ services:
       context: ..
       dockerfile: backend/Dockerfile
     environment:
-      HYPERVISOR_PROVIDER: libvirt
+      # Modo do hipervisor. O compose é o caminho de deploy em host KVM real;
+      # para demonstração sem KVM use HYPERVISOR_PROVIDER=mock no deploy/.env.
+      HYPERVISOR_PROVIDER: ${HYPERVISOR_PROVIDER:-libvirt}
+      HYPERVISOR_LIBVIRT_URI: ${HYPERVISOR_LIBVIRT_URI:-qemu:///system}
       ULTRAV_PORT: "8080"
       ULTRAV_CORS_ORIGIN: ""
-      # Modo mock: qualquer caminho serve. Modo libvirt: veja o aviso no
-      # volume `ultrav-isos` no fim deste arquivo — o caminho precisa ser
-      # idêntico dentro do container e no host.
-      # Modo libvirt: bind mount de caminho idêntico (Regra dos caminhos, AGENTS.md Fase 4)
+      # Regra dos caminhos (AGENTS.md, Fase 4): caminho idêntico dentro e fora do
+      # container, porque quem abre o arquivo é o qemu NO HOST.
       ULTRAV_ISO_DIR: /var/lib/libvirt/isos
       ULTRAV_DB_PATH: /var/lib/ultrav/data/ultrav.db
-      # Backup library (named volume — only the backend reads/writes it;
-      # qemu never opens these paths directly).
+      # Backup library: bind mount de caminho idêntico (Regra dos caminhos) —
+      # o qemu do host abre esses arquivos durante backup/restore.
       ULTRAV_BACKUP_DIR: /var/lib/ultrav/backups
       # Senha do admin inicial (criado só na primeira inicialização, banco vazio).
       # Se vazia, uma senha aleatória é gerada e registrada no log do backend.
-      ULTRAV_ADMIN_USER: admin
-      ULTRAV_ADMIN_PASSWORD: "admin@2026"
-      # Defina um segredo fixo para que as sessões sobrevivam a restarts:
-      # ULTRAV_JWT_SECRET: troque-por-um-segredo-longo
+      ULTRAV_ADMIN_USER: ${ULTRAV_ADMIN_USER:-admin}
+      ULTRAV_ADMIN_PASSWORD: ${ULTRAV_ADMIN_PASSWORD:-admin@2026}
+      # OBRIGATÓRIO: sem um segredo fixo o backend gera um efêmero e todas as
+      # sessões caem a cada restart do container.
+      ULTRAV_JWT_SECRET: ${ULTRAV_JWT_SECRET:?defina ULTRAV_JWT_SECRET em deploy/.env (openssl rand -hex 32)}
     volumes:
       - /var/run/libvirt:/var/run/libvirt
       - /var/lib/libvirt/isos:/var/lib/libvirt/isos
@@ -34,15 +36,19 @@ services:
       # falha e o fallback (OpenGraphicsFD) quebra com "Failed to recv file
       # descriptor" — fd-passing não atravessa o bind mount do socket.
       - /var/lib/libvirt/qemu:/var/lib/libvirt/qemu:ro
+      # Sem isto o card do host mostra o SO do container (Debian), não o do host.
+      - /etc/os-release:/etc/os-release:ro
       - ultrav-data:/var/lib/ultrav/data
       # Backup library: bind mount de caminho idêntico (Regra dos caminhos) —
       # quem grava os arquivos-alvo do backup é o qemu NO HOST.
       - /var/lib/ultrav/backups:/var/lib/ultrav/backups
-    # Acesso ao socket do libvirt (root:libvirt, gid 137) e ao dir de ISOs
-    # (root:kvm, gid 104) no host
+    # Os GIDs variam por distro/host (Debian usa 137/104; Ubuntu 26.04 usa
+    # 982/992). Nunca hardcode: preencha deploy/.env com
+    #   getent group libvirt | cut -d: -f3
+    #   getent group kvm     | cut -d: -f3
     group_add:
-      - "137"
-      - "104"
+      - "${LIBVIRT_GID:?defina LIBVIRT_GID em deploy/.env (getent group libvirt)}"
+      - "${KVM_GID:?defina KVM_GID em deploy/.env (getent group kvm)}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
@@ -55,6 +61,10 @@ services:
     build:
       context: ..
       dockerfile: frontend/Dockerfile
+      args:
+        # Entra no SAN do certificado autoassinado (HTTPS é obrigatório para o
+        # noVNC). Use o IP/DNS pelo qual a UI será acessada.
+        ULTRAV_HOST_IP: ${ULTRAV_HOST_IP:?defina ULTRAV_HOST_IP em deploy/.env}
     ports:
       - "8275:443"  # UI (HTTPS, noVNC exige contexto seguro) + /api + /docs
     depends_on:
@@ -63,22 +73,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  # ATENÇÃO — volume nomeado só serve para HYPERVISOR_PROVIDER=mock.
-  #
-  # Com libvirt real, o backend grava o caminho do ISO no XML do domínio e
-  # quem abre o arquivo é o qemu, NO HOST. Um volume nomeado faz
-  # /var/lib/ultrav/isos significar coisas diferentes nos dois namespaces:
-  # o upload funciona, o os.Stat de validação passa dentro do container e a
-  # VM só quebra no start, com
-  #   Cannot access storage file '/var/lib/ultrav/isos/<arquivo>.iso'
-  #
-  # Em modo libvirt, substitua por um bind mount de caminho idêntico (o
-  # docker-compose.override.yml do host de produção faz isso):
-  #   environment:
-  #     ULTRAV_ISO_DIR: /var/lib/libvirt/isos
-  #   volumes:
-  #     - /var/lib/libvirt/isos:/var/lib/libvirt/isos
-  # O diretório precisa ser gravável pelo usuário do container (`nobody`):
-  #   sudo chgrp kvm /var/lib/libvirt/isos && sudo chmod 2775 /var/lib/libvirt/isos
-  ultrav-isos:
   ultrav-data:
