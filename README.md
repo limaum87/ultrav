@@ -33,17 +33,45 @@ UltraV is a platform for managing **KVM/QEMU** virtual machines on single Linux 
 
 ## 🚀 Quick start (Docker)
 
-No KVM host required — the backend runs with `MockHypervisorProvider` (realistic fake VMs):
+The compose stack deploys **against a real KVM host** (libvirt): libvirt plus qemu
+running on the host, and a `default` disk pool. Full host preparation is in
+[`AGENTS.md`](AGENTS.md); the short version:
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+# 1. host parameters (GIDs, IP, JWT secret, admin password)
+cp deploy/.env.example deploy/.env
+getent group libvirt kvm      # fill LIBVIRT_GID / KVM_GID
+openssl rand -hex 32          # fill ULTRAV_JWT_SECRET
+$EDITOR deploy/.env           # set ULTRAV_HOST_IP and a real admin password
+
+# 2. build and start
+docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-| Service  | URL                                |
-|----------|------------------------------------|
-| UI       | http://localhost:8275              |
-| Swagger  | http://localhost:8275/docs         |
-| API      | http://localhost:8275/api/v1/...   |
+| Service | URL                                                          |
+|---------|--------------------------------------------------------------|
+| UI      | https://localhost:8275 *(self-signed certificate — expected)* |
+| Swagger | https://localhost:8275/docs                                   |
+| API     | https://localhost:8275/api/v1/...                             |
+
+The UI is served over **HTTPS** because the noVNC console requires a secure
+context. The certificate SAN is built from `ULTRAV_HOST_IP`, so open the UI
+through that address (otherwise the browser reports a name mismatch).
+
+Initial login: `admin` with the `ULTRAV_ADMIN_PASSWORD` from `deploy/.env`
+(default `admin@2026`). The user exists only after the first boot with an empty
+database — changing the variable later does not alter an existing admin.
+
+> **No KVM?** Set `HYPERVISOR_PROVIDER=mock` in `deploy/.env`: the host becomes
+> the fictional `kvm01` with 4 demo VMs and nothing touches libvirt.
+
+### Network and firewall
+
+Port **8275/TCP** is **intentionally open** on the management network: UltraV is
+meant to be reached directly from the LAN, and access control is the JWT login,
+not a firewall rule — no `ufw`/`iptables` rule is expected. Keep it on the
+internal network (VPN or an authenticating proxy if it must be reached from
+outside); never expose it to the internet, and never expose libvirt's port 16509.
 
 Deployment details: [`deploy/README.md`](deploy/README.md).
 
