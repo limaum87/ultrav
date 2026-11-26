@@ -13,12 +13,14 @@ Leia a seção **Resultado** primeiro: ela diz o que funciona e o que é beco se
 | Caminho | O que é | Estado |
 |---|---|---|
 | **A — P2V do XP** | O disco do XP original vira `qcow2` e roda como VM no libvirt | ✅ **Funciona** — XP boota, `chkdsk` corrige, PVI 2.5.3 inicializa |
-| **B — Windows 7 x86 + EASY** | Win7 limpo + EASY copiado do backup | ⚠️ **Parcial** — EASY abre e chega ao login, mas **PVI não inicializa** (`VU1511`) |
+| **B — Windows 7 x86 + EASY** | Win7 + EASY/PVI copiados, com `NoCheckKey="1"` | ✅ **Funciona** — mas sem o ajuste o PVI fica em *trial mode* e o EASY acusa erro de PVI (§8, §9) |
 | **C — Win7 + PVI moderno** | PVI 4.12/6.x no Win7 | ❌ **Impossível** — instalador recusa: *"At least Windows 10 1607 is required"* |
 
-**Conclusão:** o alvo viável é o caminho **A**. O caminho B serve para provar que o
-aplicativo roda no Win7, mas o runtime PVI 2.5.3 (de 2007) não inicializa nesse SO,
-e não existe instalador público de uma versão compatível.
+**Conclusão:** os dois caminhos viáveis são **A** (VM com o XP do P2V) e **B**
+(Win7 real + EASY/PVI transplantados, §8). O obstáculo do caminho B não era o
+sistema operacional, e sim o PVI em **trial mode** por falta da chave de segurança
+(§9) — resolvido com `NoCheckKey="1"`. O caminho **C** continua impossível: não há
+PVI moderno que rode no Win7.
 
 ---
 
@@ -403,7 +405,86 @@ sudo virsh attach-device xp-prensa /tmp/usb.xml --config
 
 ---
 
-## 8. Referências no repositório
+## 8. Windows 7 de produção (wir-corte-01) — EASY + PVI do zero
+
+Passo a passo validado numa máquina real (Win7 Pro SP1 x86, 3,5 GB RAM), a partir de
+um Windows limpo e do backup `Schleuniger.zip`:
+
+1. **EASY**: extrair `EASY.zip` em `C:\Schleuniger\EASY` (3.619 arquivos). Sem
+   PowerShell 5 (Win7 tem 2.0), use o COM do Shell:
+
+   ```powershell
+   $sh = New-Object -ComObject Shell.Application
+   $sh.NameSpace("C:\").CopyHere($sh.NameSpace("C:\easy.zip").Items(), 16)
+   ```
+
+2. **PVI**: copiar a árvore completa `BrAutomation` (~11 MB, 61 arquivos) para
+   `C:\Program Files\BrAutomation` e `PviCom.dll`/`PviLog.dll` para
+   `C:\Windows\System32`.
+3. **Registro**: importar `HKLM\SOFTWARE\BR_Automation` e
+   `HKLM\SOFTWARE\Schleuniger` exportados da hive do XP
+   (`reged -x XP-SOFTWARE.hive ...`, pacote `chntpw`).
+4. **Chave de segurança**: editar `...\Bin\PviConfig.xml` → `NoCheckKey="1"` (§9).
+   Preserve o original (1.623 bytes, CRLF). **Não** reescreva com PowerShell 2.0:
+   `Get-Content -Raw` não existe e um `WriteAllText` com string vazia destrói o
+   arquivo (foi o que aconteceu aqui).
+5. **Ordem de start**: `PviMan` **primeiro**, com o diretório de trabalho =
+   `...\V2.5.3\Bin` (senão `PVI Error 12103`), e o EASY ~8 s depois.
+6. **Auto-start** (`C:\Schleuniger\start-easy.bat` + `start-easy.vbs` sem janela),
+   na pasta Startup **All Users**:
+   `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`
+
+   ```bat
+   @echo off
+   start "" /d "C:\Program Files\BrAutomation\PVI\V2.5.3\Bin" "C:\Program Files\BrAutomation\PVI\V2.5.3\Bin\PviMan.exe"
+   timeout /t 8 /nobreak >nul
+   start "" /d "C:\Schleuniger\EASY" "C:\Schleuniger\EASY\EASY.exe"
+   ```
+
+7. **Auto-logon**: o Startup só roda depois de um logon. Para a máquina subir
+   sozinha: `control userpasswords2` → desmarcar *"Os usuários devem digitar
+   senha"*, ou `AutoAdminLogon=1` em `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon`.
+
+---
+
+## 9. PVI: trial mode, NoCheckKey e o instalador original
+
+**Sintoma.** O PVI Manager abre com *"Can't find PVI security key / Trial mode is
+active"* e o EASY acusa *"Escrita PVI errada das informações estruturais"* (ou
+*"Inicialização PVI errada"*, dependendo do estágio).
+
+**Causa.** O PVI 2.5.3 verifica uma chave de segurança (licença/dongle). Sem ela
+roda em **trial**, com escrita limitada — e o EASY não consegue gravar a estrutura
+no PLC. Isso acontece **mesmo com a máquina desligada**, o que confunde o
+diagnóstico (a mensagem parece falta de hardware).
+
+**Correção.** Em `...\PVI\V2.5.3\Bin\PviConfig.xml`:
+
+```xml
+<PviMan NoDispErr="0" NoCheckBuR="0" NoCheckKey="1" />
+```
+
+Reinicie o `PviMan` — o diálogo desaparece.
+
+**O instalador original existe.** No disco do XP, dentro do backup de 2011:
+
+```
+Backup 04_05_2011\Schleuniger\SchleunigerTools\PVI-Manager only\
+├── Automation Net PVI Runtime V2.5.3.exe   (9,3 MB, 2007-05-16)
+└── BrLcMod.dll
+```
+
+Cópia preservada em `/srv/ultrav-prensa/pvi-installer/` (sha256 `63db05b6…`).
+**Prefira o instalador** ao transplante de arquivos: ele registra drivers, serviços
+e o próprio `PviConfig.xml` corretamente.
+
+**Diagnóstico da comunicação.** `wmic path Win32_SerialPort get DeviceID,Description` —
+se não retornar nada, a interface não está conectada. O `PviConfig.xml` traz as
+linhas disponíveis: `com1`, `inacan1`, `modem1`, `tcpip`, `pbusfdl1`, `ls251_1`.
+
+---
+
+## 10. Referências no repositório
 
 - `AGENTS.md` — instalação do UltraV no host (Docker, libvirt, GIDs)
 - `deploy/docker-compose.yml` + `deploy/.env.example` — stack do UltraV
