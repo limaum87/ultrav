@@ -569,6 +569,29 @@ qemu-img convert -O qcow2 "<...>.vhd" /var/lib/libvirt/images/wir-corte-01.qcow2
 # a partição não está marcada como ativa: marcar com sfdisk/fdisk antes de bootar
 ```
 
+### Imagem com Macrium Reflect (restaurar em hardware diferente)
+
+O `wbadmin` resolve o **mesmo modelo**; para **qualquer hardware** use o
+Macrium, que tem **Redeploy** (injeta drivers de armazenamento/HAL no restore).
+
+- Instalado: **Macrium Reflect Home v7.2.4325 (x86)** — `C:\Program Files\Macrium\Reflect`
+- Imagem criada: `\\192.168.8.57\backup\04B817AF55D14CFB-00-00.mrimg` (**3,3 GB**, ~10 min)
+- Definição salva: `C:\Users\wiretec\Documents\Reflect\My Backup.xml`
+  → novo backup por CLI:
+  `reflect.exe -e -w "C:\Users\wiretec\Documents\Reflect\My Backup.xml"`
+
+**Credenciais do share no wizard.** O diálogo *"Segurança do Windows"* mostra o
+usuário como texto estático (`anonymous`). É preciso clicar em **"Usar outra
+conta"** e informar `192.168.8.57\bkp` + a senha do share; senão o destino
+falha com *"Acesso negado"*.
+
+**Mídia de resgate é obrigatória.** Sem ela o `.mrimg` não restaura num disco
+novo: *Other Tasks → Create Rescue Media* (USB ou ISO). Guarde a mídia junto com
+a imagem — e teste o boot por ela antes de precisar.
+
+**Licença.** O instalador está em avaliação (expira em 29 dias). O **Redeploy** é
+recurso premium; para produção em hardware diferente é preciso licença válida.
+
 ### Cuidados
 
 - Tire a imagem **com o sistema validado** (rede + EASY funcionando). Imagem de
