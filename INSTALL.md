@@ -528,7 +528,56 @@ administrador.
 | "Escrita PVI errada…" + `VU1511` | sem rota até o PLC | colocar o PC na rede `10.49.40.0/24` |
 
 ---
-## 11. Referências no repositório
+## 11. Imagem do disco (backup/restauração) — wir-corte-01
+
+### Como foi feita
+
+1. **Share SMB no host** (`acc-ultrav`), com Samba:
+   ```bash
+   sudo apt-get install -y samba
+   sudo useradd -M -s /usr/sbin/nologin bkp
+   printf "senha\nsenha\n" | sudo smbpasswd -s -a bkp
+   # /etc/samba/smb.conf:
+   # [backup] path=/srv/backup writable=yes valid users=bkp
+   sudo systemctl restart smbd && sudo systemctl enable smbd
+   ```
+2. **Backup no Windows** (elevado, na `wir-corte-01`):
+   ```bat
+   net use \\192.168.8.57\backup /user:bkp <senha>
+   wbadmin start backup -backupTarget:\\192.168.8.57\backup ^
+       -user:bkp -password:<senha> -include:C: -allCritical -quiet
+   ```
+3. Resultado: `/srv/backup/WindowsImageBackup/wir-corte-01/Backup <data>/`
+   com dois `.vhd` (System Reserved 100 MB + C: ~5,6 GB) e o catálogo.
+   O `wbadmin` usa **VSS**: a imagem é consistente, sem parar a máquina.
+
+### Como restaurar numa máquina nova
+
+1. Boot pelo **DVD do Windows 7** (ISO em `/var/lib/libvirt/isos/`)
+2. **Reparar o computador** → **Restauração de imagem do sistema**
+3. Apontar para `\\192.168.8.57\backup` (usuário `bkp`)
+4. Restaurar no disco novo; no primeiro boot o Windows instala os drivers genéricos
+5. Conferir: EASY/PVI abrem, tarefa **EASY Autostart** existe, IP da rede da máquina
+
+### Plano B: rodar a imagem como VM
+
+O `.vhd` é **MBR** (primeiro setor `33 C0 8E D0`), partição NTFS única. Dá para
+converter e bootar como VM:
+
+```bash
+qemu-img convert -O qcow2 "<...>.vhd" /var/lib/libvirt/images/wir-corte-01.qcow2
+# a partição não está marcada como ativa: marcar com sfdisk/fdisk antes de bootar
+```
+
+### Cuidados
+
+- Tire a imagem **com o sistema validado** (rede + EASY funcionando). Imagem de
+  sistema não testado só replica problema.
+- Mantenha **duas** imagens: uma de segurança e uma "boa" pós-validação.
+- O share tem usuário/senha simples — use só na rede de gerência.
+
+---
+## 12. Referências no repositório
 
 - `AGENTS.md` — instalação do UltraV no host (Docker, libvirt, GIDs)
 - `deploy/docker-compose.yml` + `deploy/.env.example` — stack do UltraV
