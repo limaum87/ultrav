@@ -484,7 +484,51 @@ linhas disponíveis: `com1`, `inacan1`, `modem1`, `tcpip`, `pbusfdl1`, `ls251_1`
 
 ---
 
-## 10. Referências no repositório
+## 10. Rede da máquina e o erro de PVI (caso real)
+
+O EASY do CrimpCenter conversa com o PLC B&R pela linha **LNINA2 em TCP/IP**:
+
+```ini
+[InitPVI]            ; system/CC_SPS60.INI, CC_SPS63.INI, CC_SPS63RB.INI
+CommunityPort=tcpip
+TcpIpAdress=10.49.40.200
+TcpIpPort=20000
+LineName=LNINA2
+```
+
+**O PC precisa estar na mesma rede do PLC.** O PC original tinha IP **fixo
+`10.49.40.100/24`, sem gateway** (configuração recuperada da hive
+`XP-SYSTEM.hive`, chave
+`SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{GUID}`).
+Sem rota para `10.49.40.200`, o EASY abre com a faixa vermelha
+*"Escrita PVI errada das informações estruturais"* e o diálogo **`VU1511`** —
+o mesmo comportamento da máquina antiga com a prensa desligada.
+
+Topologia recomendada (duas placas):
+
+| Placa | IP | Gateway | Uso |
+|---|---|---|---|
+| Onboard | `192.168.8.x` (DHCP) | da LAN | gerência / acesso remoto |
+| Segunda | `10.49.40.100/24` | **nenhum** | switch do PLC |
+
+`C:\Schleuniger\rede-maquina.bat` configura a segunda placa (detecta a
+"Realtek PCIe FE", exige link de cabo e aplica IP fixo). Rode como
+administrador.
+
+**Não confunda o PressSim com o PLC.** O simulador (`EASY PressCom`) escuta em
+**TCP 9999** e simula a prensa, não o controlador — apontar o `[InitPVI]` para
+`127.0.0.1:9999` não resolve o erro.
+
+### Erros de boot
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| `PVI Error 12103 — Can't initialize PVI communication (PviCom.dll)` no logon | `PviMan` sobe antes do Windows terminar de carregar | atraso de ~25 s no script de startup (e 10 s entre PviMan e EASY) |
+| Aviso *"Can't find PVI security key / Trial mode is active"* | flag de exibição do PVI | `ManDispTrial=0` (DWORD) em `HKLM\SOFTWARE\BR_Automation\PVI` |
+| "Escrita PVI errada…" + `VU1511` | sem rota até o PLC | colocar o PC na rede `10.49.40.0/24` |
+
+---
+## 11. Referências no repositório
 
 - `AGENTS.md` — instalação do UltraV no host (Docker, libvirt, GIDs)
 - `deploy/docker-compose.yml` + `deploy/.env.example` — stack do UltraV
